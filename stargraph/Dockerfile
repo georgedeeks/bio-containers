@@ -33,3 +33,4 @@ RUN stargraph.sh --help
 
 # Default command
 CMD ["stargraph.sh", "--help"]
+# Force rebuild
