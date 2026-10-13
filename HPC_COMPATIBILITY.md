@@ -28,6 +28,7 @@ Updated 2026-10-13 from the user's Obsidian note `Code/Infrastructure & Tech/Ins
 | Temporary storage | `/tmp` is only **5 GB**, `$TMPDIR` unset (checked). Set container caches and temporary paths under `/tsl/scratch/$USER` before pulling |
 | Scratch | `/tsl/scratch`: 77 TB volume, 38 TB free at the note's check; up to 3 TB per user from older notes. Usage changes; check quota/free space. Not backed up |
 | Persistent SIFs/results | `/hpc-home` or a suitable `/tsl` location visible to jobs. Home quota unrecorded; retain needed results/SIFs outside purgeable scratch |
+| Shared software installs | User's current convention: `/tsl/software/testing/<Software>/<version>/x86_64/` (reported 2026-10-13; flexible). Prefer this for shared SIF installations when writable; keep download/conversion and per-user job caches on scratch. Shared weights may live alongside the SIF or in an existing shared model directory; settings/results belong in users' project directories |
 | CPU/RAM allocation | Match job requests to the intended workload; available limits not yet recorded |
 | MPI / local image builds | MPI integration unverified. Whether fakeroot builds work on software23 is unknown; pulling our published Docker images avoids needing a local Dockerfile build |
 

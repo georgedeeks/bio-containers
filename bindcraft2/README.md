@@ -17,39 +17,45 @@ Packaging changes from the upstream Dockerfile: CUDA 12, an isolated Python envi
 
 ## Pull the image and prepare weights
 
-Run on **software23**. This uses the site's default mounts, with no user `--bind`. Allow roughly 20 GB of free scratch for model download/extraction and additional room for image conversion. Keep the SIF on persistent storage with sufficient quota.
+Run on **software23**. Use the shared install directory **`/tsl/software/testing/BindCraft2/1.0.3/x86_64/`**, following the site's software/version/architecture layout. You need write access while installing; requesters need read access to the SIF/weights and traversal access to their parent directories. This uses the site's default mounts, with no user `--bind`.
+
+Keep Apptainer's download/conversion cache on scratch. The weights below live alongside the SIF: allow roughly 20 GB there for their download/extraction, plus space for the SIF. Upstream stages its weight archive beside the destination, even when `TMPDIR` points to scratch.
 
 ```bash
 ml load apptainer
+umask 022
+install_dir="/tsl/software/testing/BindCraft2/1.0.3/x86_64"
+sif="$install_dir/bindcraft2.sif"
 export APPTAINER_TMPDIR="/tsl/scratch/$USER/apptainer-tmp"
 export APPTAINER_CACHEDIR="/tsl/scratch/$USER/apptainer-cache"
-sif="$HOME/containers/bindcraft2.sif"
-mkdir -p "$APPTAINER_TMPDIR" "$APPTAINER_CACHEDIR" "$(dirname "$sif")"
-apptainer pull "$sif" docker://ghcr.io/georgedeeks/bindcraft2:latest
+mkdir -p "$APPTAINER_TMPDIR" "$APPTAINER_CACHEDIR" "$install_dir"
+apptainer pull "$sif" \
+    docker://ghcr.io/georgedeeks/bindcraft2@sha256:fa2adb249f2fbdfc3a0eccb77d958b432de04ea513f7fba95bb0a9970b54549b
 apptainer exec --cleanenv "$sif" bindcraft --help
 ```
 
-If GHCR reports that the package is private, add `--docker-login` immediately after `pull` and use the authentication described in the [adding guide](../ADDING_NEW_CONTAINER_GUIDE.md#4-pull-and-run-on-the-hpc). For updates, pull to a new SIF filename. Save the digest from the successful GitHub Actions run alongside the SIF.
+This pulls the exact image from the [successful publication run](https://github.com/georgedeeks/bio-containers/actions/runs/38424130232); anonymous registry access was verified. If access changes, see [registry authentication](../ADDING_NEW_CONTAINER_GUIDE.md#4-pull-and-run-on-the-hpc). For updates, use a new version directory or SIF filename. If you already pulled this image into `$HOME/containers/bindcraft2.sif`, move that existing file into `"$sif"` instead of downloading it again; its location is not baked into the image. Do not overwrite an existing installation.
 
 Fetch and check the external AlphaFold 2 parameters once, without a GPU:
 
 ```bash
-weights_root="/tsl/scratch/$USER/bindcraft2/weights"
+weights_root="$install_dir/weights"
 mkdir -p "$weights_root"
 apptainer exec --cleanenv --pwd "$PWD" \
     --env "TMPDIR=$APPTAINER_TMPDIR" --env "BINDCRAFT_WEIGHTS=$weights_root" \
     "$sif" bindcraft fetch-weights
 ```
 
-The parameter directory passed to jobs is **`$weights_root/alphafold`**. Scratch can be purged: use a persistent shared directory under `/tsl` if available. Existing suitable AF2 parameters can be reused by passing their directory instead; AF3 model weights are a different model and are not used here. Compute jobs do not download weights.
+The parameter directory passed to jobs is **`$install_dir/weights/alphafold`**. These shared files only need to be downloaded once; users keep their outputs and writable job caches elsewhere. Existing suitable AF2 parameters can be reused by passing their directory instead; AF3 model weights are a different model and are not used here. Compute jobs do not download weights.
 
 ## Requester's first GPU run
 
 Copy [run.slurm](run.slurm) and [example-settings.json](example-settings.json) into a writable project directory under `/tsl` or `/hpc-home`. From that directory on the submission node:
 
 ```bash
-sbatch run.slurm "$HOME/containers/bindcraft2.sif" \
-    "/tsl/scratch/$USER/bindcraft2/weights/alphafold" \
+install_dir="/tsl/software/testing/BindCraft2/1.0.3/x86_64"
+sbatch run.slurm "$install_dir/bindcraft2.sif" \
+    "$install_dir/weights/alphafold" \
     "$PWD/example-settings.json"
 ```
 

@@ -85,6 +85,8 @@ sif="$HOME/containers/${tool}.sif"
 
 Home quota is not yet recorded. If the SIF will not fit, choose a suitable path under `/tsl` visible to compute nodes. Scratch is not backed up; retain the image digest and copy any SIF/results you need to keep to persistent storage.
 
+For **shared software installs**, the current site convention is `/tsl/software/testing/<Software>/<version>/x86_64/`. Set `sif` to a file there instead of `$HOME/containers`; keep the Apptainer cache/temp settings on scratch. See the [BindCraft2 setup](bindcraft2/README.md#pull-the-image-and-prepare-weights) for a concrete example with shared model weights. Installing at this path does not require rebuilding the image.
+
 For a **private** image, use this instead of the last command, entering a GitHub username and personal access token (classic) with `read:packages` at the prompts. Authorize the token for your organization if its SSO policy requires it:
 
 ```bash
