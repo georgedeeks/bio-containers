@@ -1,0 +1,4 @@
+# Tools for installing the pinned upstream checkout without build isolation.
+pip
+setuptools
+wheel

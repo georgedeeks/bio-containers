@@ -1,0 +1,10 @@
+{
+  "target": "hPDL1",
+  "modality": "binder",
+  "campaign_name": "installation_check",
+  "project_folder": "results/installation_check",
+  "binder_lengths": [60],
+  "number_of_final_designs": 1,
+  "max_trajectories": 2,
+  "trajectory_only": true
+}

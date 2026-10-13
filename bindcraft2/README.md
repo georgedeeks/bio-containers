@@ -1,33 +1,101 @@
-# BindCraft2
+# BindCraft2 on TSL
 
-Status: **assessment only — container build and checks pending**. This folder currently holds installation decisions; there is no BindCraft2 Dockerfile, workflow or published image in this repository yet.
+Status: **build and checks in progress**. This is an unofficial container for the unmodified upstream code, prepared for Dan's request. The requester owns the actual GPU workload test; the installer checks compatibility, packaging and operation without a GPU.
 
-Requested by Dan. Scope: a reasonable best-effort installation with useful checks without a GPU, then handover to the requester for the actual GPU workload test. Follow the shared [installation policy and HPC profile](../HPC_COMPATIBILITY.md).
+| Item | Value |
+| --- | --- |
+| Software | BindCraft2, Python package `bindcraft` 1.0.3 |
+| Source | [Commit c0ee638](https://github.com/PacesaLab/BindCraft2/tree/c0ee638d11bc010817c2c97ee58ed5c323e664e2), fixed source-archive checksum in the Dockerfile |
+| Image | `ghcr.io/georgedeeks/bindcraft2:latest`; use the Actions summary's digest for an exact image |
+| Platform | Linux x86_64; Ubuntu 24.04 pinned by image digest; Python 3.12 in `/opt/venv` |
+| Accelerator | Explicit CUDA 12; JAX 0.11.2, matching CUDA 12 plugin/PJRT and cuEquivariance ops |
+| Dependencies | Hash-locked in [requirements.lock](requirements.lock); runtime inventory under `/opt/container-info/` |
+| Models | ProteinMPNN checkpoints included; AlphaFold 2 parameters downloaded separately on software23 |
+| Licence | Upstream [source-available licence](https://github.com/PacesaLab/BindCraft2/blob/c0ee638d11bc010817c2c97ee58ed5c323e664e2/LICENSE), retained at `/opt/bindcraft/LICENSE`; model/dependency licences remain separate |
 
-## Installation choice
+Packaging changes from the upstream Dockerfile: CUDA 12, an isolated Python environment, pinned dependencies/source/base, additional offline checks, and direct `exec` usage for TSL. Upstream Python code is unchanged. The source tree stays at `/opt/bindcraft` because its editable installation needs the adjacent settings, structures and scaffolds.
 
-Use **CUDA 12 explicitly** for the initial build. Upstream supports the `cuda12` extra (including matching JAX and cuEquivariance packages). Its installer otherwise defaults to CUDA 13 when no GPU/driver is visible, so do not rely on autodetection during a CPU-only build. Adapt the upstream container to install `.[cuda12]`; if using its installer, specify `bash install.sh cuda12`.
+## Pull the image and prepare weights
 
-Reviewed on 2026-10-13: the upstream `main` branch's package metadata reports `bindcraft` version 1.0.3, Python >=3.12 and JAX >=0.11,<0.12. Pin a release/commit and the resolved environment when implementing the container. Sources: [package requirements](https://github.com/PacesaLab/BindCraft2/blob/main/pyproject.toml), [installation guide](https://github.com/PacesaLab/BindCraft2/blob/main/docs/source/installation.md).
+Run on **software23**. This uses the site's default mounts, with no user `--bind`. Allow roughly 20 GB of free scratch for model download/extraction and additional room for image conversion. Keep the SIF on persistent storage with sufficient quota.
+
+```bash
+ml load apptainer
+export APPTAINER_TMPDIR="/tsl/scratch/$USER/apptainer-tmp"
+export APPTAINER_CACHEDIR="/tsl/scratch/$USER/apptainer-cache"
+sif="$HOME/containers/bindcraft2.sif"
+mkdir -p "$APPTAINER_TMPDIR" "$APPTAINER_CACHEDIR" "$(dirname "$sif")"
+apptainer pull "$sif" docker://ghcr.io/georgedeeks/bindcraft2:latest
+apptainer exec --cleanenv "$sif" bindcraft --help
+```
+
+If GHCR reports that the package is private, add `--docker-login` immediately after `pull` and use the authentication described in the [adding guide](../ADDING_NEW_CONTAINER_GUIDE.md#4-pull-and-run-on-the-hpc). For updates, pull to a new SIF filename. Save the digest from the successful GitHub Actions run alongside the SIF.
+
+Fetch and check the external AlphaFold 2 parameters once, without a GPU:
+
+```bash
+weights_root="/tsl/scratch/$USER/bindcraft2/weights"
+mkdir -p "$weights_root"
+apptainer exec --cleanenv --pwd "$PWD" \
+    --env "TMPDIR=$APPTAINER_TMPDIR" --env "BINDCRAFT_WEIGHTS=$weights_root" \
+    "$sif" bindcraft fetch-weights
+```
+
+The parameter directory passed to jobs is **`$weights_root/alphafold`**. Scratch can be purged: use a persistent shared directory under `/tsl` if available. Existing suitable AF2 parameters can be reused by passing their directory instead; AF3 model weights are a different model and are not used here. Compute jobs do not download weights.
+
+## Requester's first GPU run
+
+Copy [run.slurm](run.slurm) and [example-settings.json](example-settings.json) into a writable project directory under `/tsl` or `/hpc-home`. From that directory on the submission node:
+
+```bash
+sbatch run.slurm "$HOME/containers/bindcraft2.sif" \
+    "/tsl/scratch/$USER/bindcraft2/weights/alphafold" \
+    "$PWD/example-settings.json"
+```
+
+The example requests one A100, four CPU cores, 32 GB RAM and two hours. It limits BindCraft2 to one worker, preserves Slurm's GPU assignment through `--cleanenv`, places caches/temp files on scratch, checks all weights and requires JAX to select a GPU before starting. Adjust resources for the real campaign. This is a starting allocation, not a measured completion-time guarantee.
+
+The supplied settings use upstream's shipped human PD-L1 target and a short 60-residue binder, with at most two trajectories and `trajectory_only: true`. Expected results are a successful CUDA device check, campaign metadata/logs and trajectory output under `results/installation_check`. Two attempts may yield no accepted design; acceptance is not the installation pass criterion. For a full campaign, use the requester's settings and turn off `trajectory_only`.
+
+For a custom target, give `target_path` an absolute container-visible path and keep outputs in writable site storage. Discover available presets with `apptainer exec --cleanenv "$sif" bindcraft design --list-targets`. See [upstream usage](https://github.com/PacesaLab/BindCraft2/blob/c0ee638d11bc010817c2c97ee58ed5c323e664e2/docs/source/installation.md).
 
 ## Driver coverage
 
-JAX documents Linux driver minimums of **525 for CUDA 12** and **580 for CUDA 13**. CUDA 12 is the conservative choice across potentially mixed driver versions; it is not compatible with arbitrarily old drivers. Check the resolved dependencies for any stricter requirements when building. [JAX requirements](https://docs.jax.dev/en/latest/installation.html)
+CUDA 12 is selected explicitly rather than relying on the installer's no-GPU default of CUDA 13. JAX documents Linux driver minimums of **525 for CUDA 12** and **580 for CUDA 13**; CUDA 12 is not a guarantee for arbitrarily old drivers. [JAX requirements](https://docs.jax.dev/en/latest/installation.html)
 
-| Node | GPUs | Recorded driver | Current evidence |
+| Node | GPUs | Recorded driver | Evidence |
 | --- | --- | --- | --- |
 | tsl1024n1 | 2 × A100 | Unknown | Driver compatibility provisional |
-| tsl2048n2 | 4 × A100 PCIe 80 GB | 580.95.05 | Meets JAX's CUDA 12 and CUDA 13 driver minimums |
+| tsl2048n2 | 4 × A100 PCIe 80 GB | 580.95.05 | Meets the selected JAX driver requirement |
 | tsl2048n3 | 4 × A100 | Unknown | Driver compatibility provisional |
 
-Use the [zero-GPU inspection loop](../HPC_COMPATIBILITY.md#gpu-information-without-reserving-a-gpu) to fill the two gaps. This requires no GPU reservation and does not prevent build preparation. Retain CUDA 12 unless evidence from **all three** nodes supports moving to CUDA 13. A job requesting only `-p tsl-gpu --gres=gpu:1` can land on any eligible node, so n2's driver alone does not establish partition-wide compatibility.
+The [zero-GPU inspection loop](../HPC_COMPATIBILITY.md#gpu-information-without-reserving-a-gpu) can fill the two gaps. Retain CUDA 12 unless all eligible nodes support a different stack. The example job can land on any eligible A100 node; an explicit `sbatch --nodelist=tsl2048n2 ...` restricts it to the verified driver but reduces eligibility from ten configured GPUs to four.
 
-An explicit `--nodelist=tsl2048n2` would permit a CUDA 13 candidate to target the verified driver, but makes only 4 of the partition's 10 configured GPUs eligible. This is an optional tradeoff, not the default. Do not describe an unrestricted job as compatible with all three nodes until their drivers meet the selected stack's requirements.
+## Build and checks
 
-## Checks and handover
+From this repository's root:
 
-Build for Linux x86_64 and run supported package/dependency checks, CPU-side imports, CLI startup and upstream checks that do not require a GPU. Check operation as an unprivileged user with a read-only image and offline runtime. Record the exact checks and results here when implemented.
+```bash
+docker buildx build --platform linux/amd64 --load \
+    -t bio-containers/bindcraft2:local bindcraft2
+docker run --rm --platform linux/amd64 --network none --read-only \
+    --user 10001:10001 --tmpfs /tmp:rw,exec,size=256m \
+    --workdir /tmp --env HOME=/tmp bio-containers/bindcraft2:local
+```
 
-Prepare the weights on software23 before handing over an offline Slurm example. Keep weights, inputs, outputs and caches under the site's default-mounted `/tsl` or `/hpc-home` paths. The requester owns the GPU workload run; no repeat test of the established AlphaFold installation is needed.
+The default command runs [smoke-test.py](smoke-test.py). It checks dependency consistency and imports, CUDA 12 package selection and dynamic-library loading, a small JAX CPU JIT calculation, the three packaged ProteinMPNN checkpoints, upstream's shipped-weight self-check, CLI startup and preset/structure paths. `JAX_PLATFORMS=cpu` is set only inside the test process. Normal jobs retain GPU support; the Slurm example requires CUDA explicitly.
 
-Historical packaging reference: [the site's AlphaFold 3.0.0 image](../references/alphafold3.md). Its older dependency versions are reference information, not the BindCraft2 dependency specification.
+The GitHub workflow repeats the offline, read-only, non-root check before publishing `latest` and `sha-<commit>`. The default `apptainer run` also runs the installation check; use **`apptainer exec IMAGE bindcraft ...`** for software commands.
+
+To update dependencies, check out the intended pinned upstream source, then run:
+
+```bash
+uv pip compile /path/to/pinned/BindCraft2/pyproject.toml bindcraft2/build-requirements.in \
+    --extra cuda12 --python-version 3.12 --python-platform x86_64-manylinux_2_39 \
+    --only-binary :all: --generate-hashes --no-annotate \
+    --output-file bindcraft2/requirements.lock
+```
+
+Update the Dockerfile's commit and archive checksum together if changing source, rebuild and repeat the checks. The lock fixes Python distributions; the image digest fixes the complete built image, including Ubuntu packages.
+
+Historical reference: [the site's AlphaFold 3.0.0 image](../references/alphafold3.md). Shared policy and site facts: [HPC_COMPATIBILITY.md](../HPC_COMPATIBILITY.md).
