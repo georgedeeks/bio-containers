@@ -49,3 +49,5 @@ Builds run when the tool folder or its workflow changes. Pull requests are teste
 - [AGENTS.md](AGENTS.md): instructions for assistants working in this repository.
 
 Tools: [Stargraph](stargraph/README.md) and [BindCraft2](bindcraft2/README.md) (CUDA 12, with offline installation checks and a TSL Slurm example).
+
+For shared installs, use the tested **site loader → executable launcher → SIF and weights** arrangement. Users run `source <Software>-<version>` and then the normal tool command. See the [shared-wrapper guide](ADDING_NEW_CONTAINER_GUIDE.md#shared-command-wrappers) and [creator maintenance notes](references/tsl-software-wrappers.md). The loader, container libraries and external model files have different roles; no new module system or HPC repository checkout is needed.

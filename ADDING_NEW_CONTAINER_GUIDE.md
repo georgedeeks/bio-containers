@@ -101,6 +101,10 @@ For a shared installation, put an executable container launcher in the version's
 
 The [BindCraft2 launcher setup](bindcraft2/README.md#install-the-tsl-command-launcher) provides direct file downloads, a CPU installation check and a Slurm example for this pattern; no repository checkout or installer script is required on the HPC.
 
+Use the fixed self-service creator described in the [wrapper maintenance notes](references/tsl-software-wrappers.md): system-Python SQLite, local database staging, visible progress and bounded verification. Check which copy you are running if the maintainer's source and shared command differ. Supply a description/categories when registering a new tool. Preserve `source hpccore-5` and the header/footer when editing the template, then add `ml load apptainer || return 1` and the tool's bin directory to PATH. Location messages are useful; use double quotes when expanding `$USER` or other variables.
+
+Finish by sourcing the loader, confirming the command resolves to the version's bin directory, and running help plus the tool's CPU installation check. The creator's initial sourcing check alone does not exercise the container. Record the observed duration and any non-fatal fallbacks; a multi-minute installation check need not run on every software load. Keep the working SIF when only the loader or documentation changes.
+
 ### Space and site mounts
 
 Allow enough scratch for compressed downloads, expanded layers, and the final SIF. Check your own quota as well as free disk space; the shared volume's free space is not your allocation. The cache settings above do not move application temporary files. In a Slurm job, create a separate directory for its temporary work:
@@ -159,7 +163,13 @@ For Stargraph, the startup command is `stargraph.sh --help`. Use `exec IMAGE EXE
 
 Use a small representative dataset to check output files and exit status before a full job. Respect allocated CPUs and memory; do not run a full analysis on a login node. Download databases on software23 into a site-mounted path before submitting; offline compute nodes must not need to install or download anything. The container supplies userspace libraries, but still depends on the host kernel, CPU capabilities, and any GPU drivers.
 
-`--cleanenv` reduces interference from login-shell Conda environments/modules. If a tool needs a licence variable, GPU settings, or other environment values, pass the required values explicitly using the runtime's documented environment options. For GPU jobs, request `-p tsl-gpu --gres=gpu:N`, use `--nv`, and explicitly preserve Slurm's non-empty device assignment with `--env CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:?Run inside a GPU allocation}"`. Include a framework GPU-backend check in the requester's example job. Set weights and application caches to absolute site-mounted paths. Do not disable environment isolation indiscriminately.
+`--cleanenv` reduces interference from login-shell Conda environments/modules. If a tool needs a licence variable, GPU settings, or other environment values, pass the required values explicitly using the runtime's documented environment options. For GPU jobs, request `-p tsl-gpu --gres=gpu:N`, use `--nv`, and explicitly preserve Slurm's non-empty device assignment before launching the container:
+
+```bash
+export APPTAINERENV_CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:?Run inside a GPU allocation}"
+```
+
+Use this with `apptainer exec --cleanenv --no-eval --nv ...`. The `APPTAINERENV_` form preserves assignments containing commas, such as `0,2`, without using `--env`'s comma-separated option syntax. Include a framework GPU-backend check in the requester's example job. Set weights and application caches to absolute site-mounted paths. Do not disable environment isolation indiscriminately. See [Apptainer 1.4 environment handling](https://apptainer.org/docs/user/1.4/environment_and_metadata.html).
 
 ## Troubleshooting
 
@@ -175,6 +185,9 @@ Use a small representative dataset to check output files and exit status before 
 | Permission denied / read-only filesystem | Use writable paths under `/hpc-home` or `/tsl`; do not add user `--bind` mounts on TSL. Check symlink destinations. |
 | Illegal instruction / exec format error | Check compute-node CPU flags and image architecture against the package and base-image requirements. |
 | No space left during pull | Move cache and temporary storage to approved scratch; check quota as well as free disk space. |
+| Pull reports missing temporary directory | Run the scratch/cache `mkdir -p` step to completion before retrying; exporting a path does not create it. |
+| Cache disabled or Matplotlib uses a temporary cache | Read the final exit status and check result. These fallbacks were non-fatal in the BindCraft2 installation. Verify actual write access; setting the same path again is not a demonstrated fix. |
+| Wrapper creator stalls or verification fails | Read its progress/log, check whether the loader already exists, and identify the source/deployed version. See the [wrapper maintenance notes](references/tsl-software-wrappers.md); do not blindly retry with `--force`. |
 | Old Singularity cannot read the image | Use `ml load apptainer` for the checked Apptainer 1.4.5 runtime. |
 | Help passes, analysis fails | Run a small real input and inspect dependencies, databases, bindings, activation hooks, and resource limits. |
 

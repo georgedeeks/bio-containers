@@ -1,6 +1,6 @@
 # BindCraft2 on TSL
 
-Status: **ready for requester testing — native x86_64 build, offline CI checks and the SIF's CPU installation check on software23 passed; shared AF2 parameters downloaded and checked**. This is an unofficial container for the unmodified upstream code, prepared for Dan's request. The requester owns the actual GPU workload test; the installer checks compatibility, packaging and operation without a GPU.
+Status: **ready for requester testing — native x86_64 build, offline CI checks, shared TSL loader, CLI startup and CPU installation check passed; shared AF2 parameters downloaded and checked**. This is an unofficial container for the unmodified upstream code, prepared for Dan's request. The requester owns the actual GPU workload test; the installer checks compatibility, packaging and operation without a GPU.
 
 | Item | Value |
 | --- | --- |
@@ -70,25 +70,38 @@ Do this once on **software23**, after the SIF and weights are in place. There ar
 )
 ```
 
-Then register the software with the normal site tool:
+Then register the software with the site's self-service creator. The command below uses the maintainer's source copy, which was used for the successful installation:
 
 ```bash
 chmod -R a+rX /tsl/software/testing/BindCraft2/1.0.3/x86_64
-create-software-testing-wrapper BindCraft2-1.0.3
+bash "$HOME/my-software-wrapper/bin/create-tsl-testing-wrapper" \
+    BindCraft2-1.0.3 \
+    --desc "BindCraft2 protein binder design (Apptainer, CUDA 12)" \
+    --categories "alphafold"
 ```
 
 For maintainers who already have a repository checkout, `bash bindcraft2/install-launcher.sh` is an optional way to copy the same files. It is not needed for the direct-download setup above.
 
-Use the description **BindCraft2 protein binder design (Apptainer, CUDA 12)** and suitable categories from the generator's prompts. The site's alternative is `create-tsl-testing-wrapper BindCraft2-1.0.3`; choose one generator, and edit an existing loader rather than forcing its replacement. As described in the user's site guide, the generator writes the central loader under `/tsl/software/testing/bin/` and catalogue metadata in the version directory.
+Once the fixed creator is deployed to `/tsl/software/testing/bin/`, `create-tsl-testing-wrapper` can be used instead of the explicit source path. The HPC team's `create-software-testing-wrapper` is another site option. Choose one generator; edit an existing loader rather than forcing its replacement. The generator writes the central loader under `/tsl/software/testing/bin/` and catalogue metadata in the version directory. See the [wrapper maintenance notes](../references/tsl-software-wrappers.md) for the fixes and source/deployment distinction.
 
-In the generated loader's app-specific section, ensure it loads Apptainer and puts this installation's `bin` directory on `PATH`. The required Bash actions are:
+Open `/tsl/software/testing/bin/BindCraft2-1.0.3` and make its app-specific section look like this, retaining the existing `source hpccore-5` line once. The location messages follow the user's successfully tested loader:
 
 ```bash
-ml load apptainer
+source hpccore-5
+ml load apptainer || return 1
+
+echo 'Installation: /tsl/software/testing/BindCraft2/1.0.3/x86_64/'
+echo 'Launcher:     bin/bindcraft'
+echo 'Container:    bindcraft2.sif'
+echo 'AF2 weights:  weights/alphafold/'
+echo "Per-user caches and temporary files go under ${BINDCRAFT_SCRATCH_ROOT:-/tsl/scratch/$USER}/"
+
+# Python, CUDA libraries and ProteinMPNN weights are inside the SIF.
+# The launcher supplies the external AF2 weights and per-user cache paths.
 export PATH="/tsl/software/testing/BindCraft2/1.0.3/x86_64/bin:$PATH"
 ```
 
-Preserve the site's existing loader/template logic when adding those lines. This setup does not modify the SIF or re-download weights. Users then load and check the software with:
+Preserve the site's header/footer sections. `bin/bindcraft` is a shell launcher, not a self-contained executable: keep `bindcraft2.sif` and `weights/alphafold/` beside `bin/`. No host Python or CUDA library paths are needed. This setup does not modify the SIF or re-download weights. Users then load and check the software with:
 
 ```bash
 source /tsl/software/testing/bin/BindCraft2-1.0.3
@@ -97,7 +110,7 @@ bindcraft --help
 bindcraft --check-install
 ```
 
-`command -v` should show `/tsl/software/testing/BindCraft2/1.0.3/x86_64/bin/bindcraft`. Where the central testing directory is already on `PATH`, `source BindCraft2-1.0.3` is equivalent. The installation check runs the existing CPU smoke test plus checks for the externally staged AF2 parameters; it needs no GPU.
+`command -v` should show `/tsl/software/testing/BindCraft2/1.0.3/x86_64/bin/bindcraft`. Where the central testing directory is already on `PATH`, `source BindCraft2-1.0.3` is equivalent; the user confirmed that command followed by `bindcraft --help` worked. The installation check runs the existing CPU smoke test plus checks for the externally staged AF2 parameters; it needs no GPU. It took **5 minutes 26 seconds** on the reported run and can be quiet between stages. Run it after installation or relevant changes, not whenever someone loads the software. A non-fatal Matplotlib cache fallback was observed; see [Build and checks](#build-and-checks).
 
 The launcher supplies the shared AF2 path, a per-user Matplotlib/JAX cache and a temporary working directory on scratch. It keeps the caller's working directory and arguments, limits BindCraft2 to one worker by default, and requires a Slurm GPU assignment for design/scoring and `--check-gpu`. Help, preset listings and `--check-install` use the CPU. GPU commands use `--nv`, preserve Slurm's device assignment and require JAX's CUDA backend. [Apptainer environment handling](https://apptainer.org/docs/user/1.4/environment_and_metadata.html) and [GPU support](https://apptainer.org/docs/user/1.4/gpu.html).
 
