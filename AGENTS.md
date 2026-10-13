@@ -1,0 +1,21 @@
+# Working in bio-containers
+
+> **Scope: the TSL / NBI HPC only** (`hpc.tsl.ac.uk`, Slurm, Apptainer 1.4.5). Every command, path and rule in this repository assumes that cluster. Another site needs its own profile in `HPC_COMPATIBILITY.md` before any guide here applies to it.
+
+The priority is a working HPC tool quickly. Keep one folder/image/workflow per tool and prefer maintained upstream images or prebuilt packages over unnecessary source builds or infrastructure.
+
+For GPU installs, the user's agreed scope is a reasonable best-effort installation: check the documented hardware/driver requirements, build the image, and run useful checks that do not require a GPU. Hand actual GPU workload testing to the requester. GPU queue availability is not a delivery gate, and the installer should not be asked to obtain an allocation merely to complete this process. Accept reported successful use of existing site software as evidence without repeatedly reopening its validation.
+
+When asked to add or update software:
+
+1. Read `README.md`, `ADDING_NEW_CONTAINER_GUIDE.md`, and `HPC_COMPATIBILITY.md`. Reuse confirmed cluster facts; update the profile when the user supplies new information. On TSL prefer `ml load apptainer`, use software23 for downloads, keep data under `/hpc-home` or `/tsl`, and avoid user `--bind` mounts. Preserve each source's checked/older/unverified status.
+2. Check the software's official installation requirements and available Linux packages/images. Evaluate architecture, CPU flags, resources, databases, runtime permissions, and GPU/MPI needs against the HPC profile. Ask only for missing details that affect the implementation; keep doing independent work while waiting.
+   For GPU driver discovery, use the profile's demonstrated zero-GPU Slurm inspection method before referring the user to RC. Match requirements to every node eligible for the job; evidence from one node does not establish partition-wide compatibility. Use an explicit accelerator choice in CPU-only builds, since upstream autodetection may choose an unsuitable default. Record any deliberate node restriction in the tool's notes.
+3. Use `scripts/new-tool.py` / `templates/` as a starting point. Pin the tool version and base image, keep TLS verification enabled, preserve explicit channel order, and include a meaningful offline startup test. For upstream-image or source installs, adapt the Dockerfile without discarding the workflow checks.
+4. Record sources, package/version, executable, resource/data requirements, and the actual verification status in the tool README. Never claim HPC compatibility from a Docker build alone, invent cluster specs, or silently treat unknown GPU/MPI requirements as CPU-only.
+5. Validate changed workflows and generated files, and run a local build when the required runtime is available. CI tests the container as a non-root user with a read-only filesystem and no network before publishing. For GPU tools, use supported CPU-side imports, package/version checks and upstream self-checks that work without a GPU. Fix actual installation failures; do not hide them or count a skipped GPU test as passed. Once the build and relevant available checks pass, hand over the image, concise usage instructions and a sample GPU command for the requester. Record test coverage once, without making the requester's GPU test a blocker for delivery.
+6. Keep docs and templates consistent. Preserve separate image names, tool-specific caches, workflow-file triggers, manual runs, default-branch-only publication, and exact image digest instructions. Updating templates does not update existing containers automatically.
+
+Keep shared hardware facts and general policy in `HPC_COMPATIBILITY.md`, tool-specific decisions in `tool-name/README.md`, and lengthy historical package inventories in `references/`. Link between them instead of duplicating the details. Distinguish an application's general operational history from the build date of a specific image.
+
+Do not introduce extra approval steps for ordinary reversible edits or checks. Follow the user's authorization for commits, pushes, publication, and cluster jobs. Avoid large downloads, full analyses, or cleanup of unrelated Docker/HPC resources merely to validate a small change.

@@ -1,36 +1,28 @@
-FROM quay.io/almalinux/almalinux:9
+# Official Miniforge base, pinned to the verified 26.7.2-0 image contents.
+FROM quay.io/condaforge/miniforge3:26.7.2-0@sha256:16eff7459a31bed2d395b1df0dca220c067a3a9527981ec87dbbde2eafe474e5
 
-# 1. System dependencies
-RUN dnf -y update && \
-    dnf -y install wget which bzip2 ca-certificates libxcrypt-compat openssl && \
-    dnf clean all
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
-# 2. Install Miniforge
-RUN wget --no-check-certificate https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-x86_64.sh && \
-    bash Miniforge3-Linux-x86_64.sh -b -p /opt/conda && \
-    rm Miniforge3-Linux-x86_64.sh
+# Runtime utilities and compatibility library for older bioinformatics binaries.
+RUN apt-get update && \
+    apt-get install --yes --no-install-recommends procps libcrypt1 && \
+    rm -rf /var/lib/apt/lists/*
 
-# 3. Path Setup
-ENV PATH="/opt/conda/bin:$PATH"
+# conda-forge before Bioconda; SAMtoBAM is needed only for this tool.
+# Keep certificate verification enabled. Pin the published package and build.
+RUN mamba create --yes --name tool --override-channels --strict-channel-priority \
+        --channel conda-forge --channel bioconda --channel samtobam \
+        "samtobam::stargraph=1.0.0=0" && \
+    mkdir -p /opt/container-info && \
+    conda list --name tool --explicit > /opt/container-info/conda-explicit.txt && \
+    mamba clean --all --yes && \
+    chmod -R a+rX /opt/conda/envs/tool /opt/container-info
 
-# 4. Config: SSL Verify False + Strict Channels
-RUN conda config --set ssl_verify false && \
-    conda config --add channels https://repo.prefix.dev/conda-forge && \
-    conda config --add channels https://repo.prefix.dev/bioconda && \
-    conda config --add channels samtobam && \
-    conda config --set channel_priority strict
-
-# 5. Create Environment
-RUN mamba create -y -n stargraph stargraph && \
-    mamba clean -a
-
-# 6. Finalize
-ENV PATH="/opt/conda/envs/stargraph/bin:$PATH"
+ENV PATH="/opt/conda/envs/tool/bin:/opt/conda/bin:$PATH" \
+    CONDA_PREFIX="/opt/conda/envs/tool" \
+    CONDA_DEFAULT_ENV="tool"
 WORKDIR /data
 
-# Verify installation
-RUN stargraph.sh --help
-
-# Default command
+ENTRYPOINT []
+RUN ["stargraph.sh", "--help"]
 CMD ["stargraph.sh", "--help"]
-# Force rebuild

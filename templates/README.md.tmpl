@@ -1,0 +1,30 @@
+# __TOOL__
+
+Status: **candidate — build and startup checks pending**. Generated files have not yet been built or tested.
+
+| Item | Value |
+| --- | --- |
+| Official source / installation requirements | TODO: link the upstream documentation reviewed |
+| Conda package | `__PACKAGE_SPEC__` |
+| Executable | `__EXECUTABLE__` |
+| Platform | Linux x86_64 (`linux/amd64`); confirm against compute nodes |
+| CPU flags / GPU / MPI | TODO: check upstream requirements |
+| CPU, RAM, disk and scratch needs | TODO: estimate for the intended workload |
+| Databases / network / licence needs | TODO: check upstream requirements and arrange offline data if needed |
+| CI validation | Not yet run |
+| HPC / workload checks | Record any checks run; for GPU tools the requester owns the GPU workload test. See [cluster profile](../HPC_COMPATIBILITY.md) |
+
+## Startup check
+
+After pulling the image as described in the [adding guide](../ADDING_NEW_CONTAINER_GUIDE.md), run on an allocated compute node:
+
+```bash
+ml load apptainer
+apptainer exec --cleanenv __TOOL__.sif __SMOKE_SHELL__
+```
+
+On TSL, pull/download on software23 and use paths under the default-mounted `/hpc-home` or `/tsl` trees; do not add user `--bind` mounts. Record the image digest and runtime/node details when testing. The installed package list is at `/opt/container-info/conda-explicit.txt` inside the image.
+
+## Small real-data test
+
+TODO: add an executable test command, the required input/database paths within the site mounts, expected output, and its result if run. For GPU tools, provide this as the requester's test. After the build and relevant checks without a GPU pass, the install can be marked **ready for requester testing**; GPU allocation is not a delivery gate. Keep the recorded checks specific to what actually ran.

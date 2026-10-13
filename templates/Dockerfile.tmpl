@@ -1,0 +1,25 @@
+# Official Miniforge image: version plus digest fixes the base contents.
+FROM quay.io/condaforge/miniforge3:26.7.2-0@sha256:16eff7459a31bed2d395b1df0dca220c067a3a9527981ec87dbbde2eafe474e5
+
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
+# Install system dependencies here only if this tool needs them.
+# Channels are highest priority first; keep TLS certificate checks enabled.
+RUN mamba create --yes --name tool --override-channels --strict-channel-priority \
+        --channel conda-forge --channel bioconda __EXTRA_CHANNEL__ \
+        "__PACKAGE_SPEC__" && \
+    mkdir -p /opt/container-info && \
+    conda list --name tool --explicit > /opt/container-info/conda-explicit.txt && \
+    mamba clean --all --yes && \
+    chmod -R a+rX /opt/conda/envs/tool /opt/container-info
+
+# Direct exec must work without an interactive shell or conda activate.
+ENV PATH="/opt/conda/envs/tool/bin:/opt/conda/bin:$PATH" \
+    CONDA_PREFIX="/opt/conda/envs/tool" \
+    CONDA_DEFAULT_ENV="tool"
+WORKDIR /data
+
+# Clear the base image's tini entrypoint for straightforward Singularity exec/run.
+ENTRYPOINT []
+RUN __SMOKE_JSON__
+CMD __SMOKE_JSON__
