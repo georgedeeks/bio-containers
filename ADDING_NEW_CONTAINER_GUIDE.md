@@ -95,6 +95,12 @@ For a **private** image, use this instead of the last command, entering a GitHub
 
 An existing SIF is not silently replaced. For an update, pull to a **new filename** and test it before switching your jobs. For an exact release, use the digest command from the Actions summary. Do not put registry tokens in Dockerfiles, workflow files, or shell history.
 
+### Shared command wrappers
+
+For a shared installation, put an executable container launcher in the version's `x86_64/bin` directory. Register it with the site's `create-software-testing-wrapper <Software>-<version>` tool, or the documented `create-tsl-testing-wrapper` alternative, then configure runtime dependencies and PATH in the generated loader's app-specific section. Users load it with `source /tsl/software/testing/bin/<Software>-<version>`. Keep the site-generated loader and its catalogue metadata; a container launcher only needs to translate normal tool arguments into `apptainer exec` with the appropriate weights, caches and GPU settings.
+
+The [BindCraft2 launcher setup](bindcraft2/README.md#install-the-tsl-command-launcher) provides an installer, CPU installation check and Slurm example for this pattern.
+
 ### Space and site mounts
 
 Allow enough scratch for compressed downloads, expanded layers, and the final SIF. Check your own quota as well as free disk space; the shared volume's free space is not your allocation. The cache settings above do not move application temporary files. In a Slurm job, create a separate directory for its temporary work:

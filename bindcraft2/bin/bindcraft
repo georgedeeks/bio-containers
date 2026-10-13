@@ -1,0 +1,91 @@
+#!/usr/bin/env bash
+# Install at <installation>/bin/bindcraft; the SIF and weights are alongside bin/.
+set -euo pipefail
+
+fail() { printf 'bindcraft: %s\n' "$*" >&2; exit 2; }
+install_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)
+sif="$install_dir/bindcraft2.sif"
+weights="${BINDCRAFT_AF2_PARAMS:-$install_dir/weights/alphafold}"
+[[ -r "$sif" ]] || fail "Cannot read $sif"
+command -v apptainer >/dev/null || fail 'Load the runtime first: ml load apptainer'
+
+(( $# )) || set -- --help
+mode=command
+needs_gpu=1
+case "$1" in
+    --check-install) mode=installation; needs_gpu=0 ;;
+    --check-gpu) mode=gpu ;;
+    archive|unarchive|rank|filter|campaign_output|fetch-weights) needs_gpu=0 ;;
+esac
+if [[ "$mode" != command ]]; then
+    (( $# == 1 )) || fail "$1 does not take additional arguments"
+else
+    for argument in "$@"; do
+        case "$argument" in
+            -h|--help|--list-targets|--list-modalities|--list-properties|--list-core|--list-settings)
+                needs_gpu=0 ;;
+        esac
+    done
+fi
+
+if (( needs_gpu )); then
+    [[ -n "${SLURM_JOB_ID:-}" ]] || fail 'Run this command in a Slurm GPU allocation; use the supplied run-wrapper.slurm example.'
+    case "${CUDA_VISIBLE_DEVICES:-}" in
+        ''|-1|NoDevFiles|none|void) fail 'Slurm has not assigned a visible GPU.' ;;
+    esac
+fi
+if (( needs_gpu )) || [[ "$mode" == installation ]]; then
+    [[ "$weights" == /* && -d "$weights" && -r "$weights" && -x "$weights" ]] ||
+        fail "Cannot access the AlphaFold parameter directory: $weights"
+fi
+
+scratch_root="${BINDCRAFT_SCRATCH_ROOT:-/tsl/scratch/${USER:?USER is unset}}"
+[[ "$scratch_root" == /* ]] || fail 'BINDCRAFT_SCRATCH_ROOT must be an absolute mounted path.'
+cache="$scratch_root/bindcraft2-cache"
+mkdir -p "$cache/matplotlib" "$cache/jax-cuda12" "$scratch_root/bindcraft2-tmp"
+job_tmp=$(mktemp -d "$scratch_root/bindcraft2-tmp/${SLURM_JOB_ID:-shell}.XXXXXX")
+trap 'rm -rf -- "$job_tmp"' EXIT
+
+# Explicit container environment also works with --cleanenv. Preserve comma-separated
+# device assignments without passing them through --env's comma-separated parser.
+export APPTAINERENV_TMPDIR="$job_tmp"
+export APPTAINERENV_XDG_CACHE_HOME="$cache"
+export APPTAINERENV_MPLCONFIGDIR="$cache/matplotlib"
+export APPTAINERENV_JAX_COMPILATION_CACHE_DIR="$cache/jax-cuda12"
+export APPTAINERENV_OMP_NUM_THREADS="${SLURM_CPUS_PER_TASK:-1}"
+export APPTAINERENV_BINDCRAFT_AF2_PARAMS="$weights"
+export APPTAINERENV_BINDCRAFT_WORKERS_PER_GPU="${BINDCRAFT_WORKERS_PER_GPU:-1}"
+export APPTAINERENV_BINDCRAFT_DESIGN_WORKERS="${BINDCRAFT_DESIGN_WORKERS:-1}"
+container=(apptainer exec --cleanenv --no-eval --pwd "$PWD")
+if (( needs_gpu )); then
+    container+=(--nv)
+    export APPTAINERENV_CUDA_VISIBLE_DEVICES="$CUDA_VISIBLE_DEVICES"
+    export APPTAINERENV_JAX_PLATFORMS=cuda
+else
+    export APPTAINERENV_CUDA_VISIBLE_DEVICES=''
+    export APPTAINERENV_JAX_PLATFORMS=cpu
+fi
+container+=("$sif")
+
+case "$mode" in
+    installation)
+        "${container[@]}" bindcraft2-smoke-test
+        "${container[@]}" python -m bindcraft.selfcheck cuda12
+        printf 'PASS: shared AlphaFold and ProteinMPNN checkpoint files found.\n'
+        ;;
+    gpu)
+        "${container[@]}" python -m bindcraft.selfcheck cuda12
+        "${container[@]}" python -c '
+import jax
+import jax.numpy as jnp
+import numpy as np
+print("JAX devices:", jax.devices(), flush=True)
+assert jax.default_backend() == "gpu", "JAX did not select a GPU"
+x = np.arange(9, dtype=np.float32).reshape(3, 3)
+y = jax.jit(lambda a: a @ a.T)(jnp.asarray(x)).block_until_ready()
+np.testing.assert_allclose(np.asarray(y), x @ x.T)
+print("PASS: JAX CUDA computation and shared checkpoint checks")
+'
+        ;;
+    command) "${container[@]}" bindcraft "$@" ;;
+esac

@@ -48,22 +48,77 @@ apptainer exec --cleanenv --pwd "$PWD" \
 
 The parameter directory passed to jobs is **`$install_dir/weights/alphafold`**. These shared files only need to be downloaded once; users keep their outputs and writable job caches elsewhere. Existing suitable AF2 parameters can be reused by passing their directory instead; AF3 model weights are a different model and are not used here. Compute jobs do not download weights.
 
-## Requester's first GPU run
+## Install the TSL command launcher
 
-Copy [run.slurm](run.slurm) and [example-settings.json](example-settings.json) into a writable project directory under `/tsl` or `/hpc-home`. From that directory on the submission node:
+Do this once on **software23**, after the SIF and weights are in place. There are two small scripts involved: the site's sourced loader, `BindCraft2-1.0.3`, makes the software available; our executable [bin/bindcraft](bin/bindcraft) launches the container. Use the existing TSL wrapper generator for the sourced loader and catalogue metadata.
+
+Get these files from this repository. If you already have a checkout on software23, run the installation command from it. Otherwise:
+
+```bash
+version_dir="/tsl/software/testing/BindCraft2/1.0.3"
+mkdir -p "$version_dir/src"
+git clone --depth 1 https://github.com/georgedeeks/bio-containers.git \
+    "$version_dir/src/bio-containers"
+cd "$version_dir/src/bio-containers"
+```
+
+If that checkout already exists, update it with `git pull --ff-only` from its directory instead of cloning again. Install the launcher, examples and README beside the existing SIF:
 
 ```bash
 install_dir="/tsl/software/testing/BindCraft2/1.0.3/x86_64"
-sbatch run.slurm "$install_dir/bindcraft2.sif" \
-    "$install_dir/weights/alphafold" \
-    "$PWD/example-settings.json"
+bash bindcraft2/install-launcher.sh "$install_dir"
+chmod -R a+rX "$install_dir"
+create-software-testing-wrapper BindCraft2-1.0.3
 ```
 
-The example requests one A100, four CPU cores, 32 GB RAM and two hours. It limits BindCraft2 to one worker, preserves Slurm's GPU assignment through `--cleanenv`, places caches/temp files on scratch, checks all weights and requires JAX to select a GPU before starting. Adjust resources for the real campaign. This is a starting allocation, not a measured completion-time guarantee.
+Use the description **BindCraft2 protein binder design (Apptainer, CUDA 12)** and suitable categories from the generator's prompts. The site's alternative is `create-tsl-testing-wrapper BindCraft2-1.0.3`; choose one generator, and edit an existing loader rather than forcing its replacement. As described in the user's site guide, the generator writes the central loader under `/tsl/software/testing/bin/` and catalogue metadata in the version directory.
 
-The supplied settings use upstream's shipped human PD-L1 target and a short 60-residue binder, with at most two trajectories and `trajectory_only: true`. Expected results are a successful CUDA device check, campaign metadata/logs and trajectory output under `results/installation_check`. Two attempts may yield no accepted design; acceptance is not the installation pass criterion. For a full campaign, use the requester's settings and turn off `trajectory_only`.
+In the generated loader's app-specific section, ensure it loads Apptainer and puts this installation's `bin` directory on `PATH`. The required Bash actions are:
 
-For a custom target, give `target_path` an absolute container-visible path and keep outputs in writable site storage. Discover available presets with `apptainer exec --cleanenv "$sif" bindcraft design --list-targets`. See [upstream usage](https://github.com/PacesaLab/BindCraft2/blob/c0ee638d11bc010817c2c97ee58ed5c323e664e2/docs/source/installation.md).
+```bash
+ml load apptainer
+export PATH="/tsl/software/testing/BindCraft2/1.0.3/x86_64/bin:$PATH"
+```
+
+Preserve the site's existing loader/template logic when adding those lines. This setup does not modify the SIF or re-download weights. Users then load and check the software with:
+
+```bash
+source /tsl/software/testing/bin/BindCraft2-1.0.3
+command -v bindcraft
+bindcraft --help
+bindcraft --check-install
+```
+
+`command -v` should show `/tsl/software/testing/BindCraft2/1.0.3/x86_64/bin/bindcraft`. Where the central testing directory is already on `PATH`, `source BindCraft2-1.0.3` is equivalent. The installation check runs the existing CPU smoke test plus checks for the externally staged AF2 parameters; it needs no GPU.
+
+The launcher supplies the shared AF2 path, a per-user Matplotlib/JAX cache and a temporary working directory on scratch. It keeps the caller's working directory and arguments, limits BindCraft2 to one worker by default, and requires a Slurm GPU assignment for design/scoring and `--check-gpu`. Help, preset listings and `--check-install` use the CPU. GPU commands use `--nv`, preserve Slurm's device assignment and require JAX's CUDA backend. [Apptainer environment handling](https://apptainer.org/docs/user/1.4/environment_and_metadata.html) and [GPU support](https://apptainer.org/docs/user/1.4/gpu.html).
+
+Optional host overrides: `BINDCRAFT_AF2_PARAMS` selects another existing parameter directory; `BINDCRAFT_SCRATCH_ROOT` selects writable scratch under a site-mounted path (default `/tsl/scratch/$USER`). Worker counts can be changed with `BINDCRAFT_WORKERS_PER_GPU` and `BINDCRAFT_DESIGN_WORKERS` when the requester has sized their workload appropriately.
+
+## Requester's first GPU run
+
+After the launcher is installed, copy the shared [run-wrapper.slurm](run-wrapper.slurm) and [example-settings.json](example-settings.json) into a new writable project directory under `/tsl` or `/hpc-home`. From that directory on the submission node:
+
+```bash
+install_dir="/tsl/software/testing/BindCraft2/1.0.3/x86_64"
+cp -n "$install_dir/examples/run-wrapper.slurm" \
+    "$install_dir/examples/example-settings.json" .
+sbatch run-wrapper.slurm "$PWD/example-settings.json"
+```
+
+The example requests one A100, four CPU cores, 32 GB RAM and two hours. It loads the site wrapper, runs `bindcraft --check-gpu` to check weights and execute a small JAX computation on CUDA, then runs `bindcraft design` with the settings file. The launcher supplies caches, weights and the Slurm GPU assignment. Adjust resources for the real campaign. This is a starting allocation, not a measured completion-time guarantee.
+
+The supplied settings use upstream's shipped human PD-L1 target and a short 60-residue binder, with at most two trajectories and `trajectory_only: true`. Inspect `bindcraft2-<jobid>.out`: expect `PASS: JAX CUDA computation and shared checkpoint checks`, followed by a design run without a traceback, and campaign metadata/logs and trajectory output under `results/installation_check`. Two attempts may yield no accepted design; acceptance is not the installation pass criterion.
+
+For normal use, submit the same script with the requester's own settings:
+
+```bash
+sbatch run-wrapper.slurm "$PWD/my-settings.json"
+```
+
+Set a distinct output directory for each campaign, choose the real target/design settings, turn off `trajectory_only` for a full campaign, and adjust the script's resource/time requests. Inside an already allocated GPU job the command is simply `bindcraft design my-settings.json`. Help and preset discovery, such as `bindcraft design --list-targets`, can run without a GPU.
+
+For a custom target, give `target_path` an absolute container-visible path and keep outputs in writable site storage. See [upstream usage](https://github.com/PacesaLab/BindCraft2/blob/c0ee638d11bc010817c2c97ee58ed5c323e664e2/docs/source/installation.md). The original [run.slurm](run.slurm) remains available for direct container use without the site loader; its arguments are the absolute SIF, AF2 parameter directory and settings JSON paths.
 
 ## Driver coverage
 
@@ -107,6 +162,8 @@ docker run --rm --platform linux/amd64 --network none --read-only \
 The default command runs [smoke-test.py](smoke-test.py). It checks dependency consistency and imports, CUDA 12 package selection and dynamic-library loading, a small JAX CPU JIT calculation, the three packaged ProteinMPNN checkpoints, upstream's shipped-weight self-check, CLI startup and preset/structure paths. `JAX_PLATFORMS=cpu` is set only inside the test process. Normal jobs retain GPU support; the Slurm example requires CUDA explicitly.
 
 The GitHub workflow repeats the offline, read-only, non-root check before publishing `latest` and `sha-<commit>`. The default `apptainer run` also runs the installation check; use **`apptainer exec IMAGE bindcraft ...`** for software commands.
+
+Host launcher checks: `python3 bindcraft2/test-wrapper.py` exercises installation into a directory containing spaces, CPU/GPU routing, refusal of unallocated GPU work, unchanged CLI arguments and device lists, shared/cache paths, temporary-file cleanup and error propagation using a recording Apptainer stub. These check launcher behavior; the SIF's actual HPC CPU check is recorded above. The site's generated loader still needs to be installed and sourced on the HPC.
 
 To update dependencies, check out the intended pinned upstream source, then run:
 
