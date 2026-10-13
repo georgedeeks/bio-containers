@@ -1,6 +1,6 @@
 # BindCraft2 on TSL
 
-Status: **build and checks in progress**. This is an unofficial container for the unmodified upstream code, prepared for Dan's request. The requester owns the actual GPU workload test; the installer checks compatibility, packaging and operation without a GPU.
+Status: **ready for requester testing — native x86_64 build and offline installation checks passed**. This is an unofficial container for the unmodified upstream code, prepared for Dan's request. The requester owns the actual GPU workload test; the installer checks compatibility, packaging and operation without a GPU.
 
 | Item | Value |
 | --- | --- |
@@ -72,6 +72,8 @@ CUDA 12 is selected explicitly rather than relying on the installer's no-GPU def
 The [zero-GPU inspection loop](../HPC_COMPATIBILITY.md#gpu-information-without-reserving-a-gpu) can fill the two gaps. Retain CUDA 12 unless all eligible nodes support a different stack. The example job can land on any eligible A100 node; an explicit `sbatch --nodelist=tsl2048n2 ...` restricts it to the verified driver but reduces eligibility from ten configured GPUs to four.
 
 ## Build and checks
+
+Verified on 2026-10-13 on GitHub's native Ubuntu 24.04 x86_64 runner: the image built successfully and the complete smoke test passed as UID/GID 10001, with networking disabled, a read-only root filesystem and only `/tmp` writable. [Initial validation run](https://github.com/georgedeeks/bio-containers/actions/runs/38421677693). The publication workflow repeats these checks before uploading an image. AlphaFold 2 weights are staged separately; no GPU allocation was used for these installation checks.
 
 From this repository's root:
 

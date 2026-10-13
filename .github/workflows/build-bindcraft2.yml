@@ -2,7 +2,7 @@ name: Build bindcraft2
 
 on:
   push:
-    branches: [main, master, 'codex/bindcraft2-cuda12']
+    branches: [main, master]
     paths:
       - 'bindcraft2/**'
       - '.github/workflows/build-bindcraft2.yml'

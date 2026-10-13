@@ -32,7 +32,7 @@ RUN mkdir /opt/bindcraft && \
     python -m pip check && \
     python -m pip freeze --all > /opt/container-info/pip-freeze.txt && \
     printf '%s\n' 'c0ee638d11bc010817c2c97ee58ed5c323e664e2' > /opt/container-info/upstream-revision.txt && \
-    chmod -R a+rX /opt/bindcraft /opt/venv /opt/container-info
+    chmod -R a+rX /opt/bindcraft /opt/container-info
 
 # Make pip's NVIDIA libraries discoverable to JAX and its plugins.
 RUN python -c "import nvidia, pathlib; print('\n'.join(sorted(str(path) for root in nvidia.__path__ for path in pathlib.Path(root).glob('*/lib'))))" \

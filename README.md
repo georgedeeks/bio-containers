@@ -48,6 +48,4 @@ Builds run when the tool folder or its workflow changes. Pull requests are teste
 - `references/`: detailed evidence from existing site installations, including [AlphaFold 3.0.0](references/alphafold3.md).
 - [AGENTS.md](AGENTS.md): instructions for assistants working in this repository.
 
-Current tool: [Stargraph](stargraph/README.md).
-
-Planned GPU tool: [BindCraft2 installation assessment](bindcraft2/README.md) — CUDA 12 selected; container implementation pending.
+Tools: [Stargraph](stargraph/README.md) and [BindCraft2](bindcraft2/README.md) (CUDA 12, with offline installation checks and a TSL Slurm example).
