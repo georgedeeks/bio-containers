@@ -1,6 +1,6 @@
 # BindCraft2 on TSL
 
-Status: **ready for requester testing — native x86_64 build, offline CI checks and the SIF's CPU installation check on software23 passed**. This is an unofficial container for the unmodified upstream code, prepared for Dan's request. The requester owns the actual GPU workload test; the installer checks compatibility, packaging and operation without a GPU.
+Status: **ready for requester testing — native x86_64 build, offline CI checks and the SIF's CPU installation check on software23 passed; shared AF2 parameters downloaded and checked**. This is an unofficial container for the unmodified upstream code, prepared for Dan's request. The requester owns the actual GPU workload test; the installer checks compatibility, packaging and operation without a GPU.
 
 | Item | Value |
 | --- | --- |
@@ -82,6 +82,8 @@ The [zero-GPU inspection loop](../HPC_COMPATIBILITY.md#gpu-information-without-r
 Verified on 2026-10-13 on GitHub's native Ubuntu 24.04 x86_64 runner: the image built successfully and the complete smoke test passed as UID/GID 10001, with networking disabled, a read-only root filesystem and only `/tmp` writable. [Initial validation run](https://github.com/georgedeeks/bio-containers/actions/runs/38421677693). The publication workflow repeats these checks before uploading an image. AlphaFold 2 weights are staged separately; no GPU allocation was used for these installation checks.
 
 **HPC result, user-reported 2026-10-13:** the published image was pulled to the shared installation path above, and `apptainer exec --cleanenv "$sif" bindcraft2-smoke-test` passed on software23 with Apptainer 1.4.5-2. It reported BindCraft2 1.0.3, JAX/CUDA 12 plugin/PJRT 0.11.2 and cuEquivariance ops 0.11.1; CPU JIT, CUDA library loading, packaged weights, presets and CLI startup passed. This check covers the packaged ProteinMPNN weights; external AF2 parameter setup is separate.
+
+**Weights result, user-reported 2026-10-13:** `bindcraft fetch-weights` downloaded and extracted the 5.3 GB AlphaFold parameter archive to `/tsl/software/testing/BindCraft2/1.0.3/x86_64/weights/alphafold`, then reported that directory and the packaged ProteinMPNN directory successfully. This command checks that the required AF2 and all three ProteinMPNN checkpoint variants exist and meet upstream's minimum file sizes. Shared weight staging is complete; the requester's Slurm job uses the paths above.
 
 Matplotlib reported an unwritable home configuration directory and successfully used a temporary fallback. For subsequent installation checks, give it a persistent writable cache on scratch, as the Slurm script already does:
 
