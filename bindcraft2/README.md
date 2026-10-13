@@ -52,24 +52,32 @@ The parameter directory passed to jobs is **`$install_dir/weights/alphafold`**. 
 
 Do this once on **software23**, after the SIF and weights are in place. There are two small scripts involved: the site's sourced loader, `BindCraft2-1.0.3`, makes the software available; our executable [bin/bindcraft](bin/bindcraft) launches the container. Use the existing TSL wrapper generator for the sourced loader and catalogue metadata.
 
-Get these files from this repository. If you already have a checkout on software23, run the installation command from it. Otherwise:
+**No Git checkout or installer script is required.** Download the tested launcher and two example files directly into the existing installation. This block stages the downloads before installing them and stops if any download fails:
 
 ```bash
-version_dir="/tsl/software/testing/BindCraft2/1.0.3"
-mkdir -p "$version_dir/src"
-git clone --depth 1 https://github.com/georgedeeks/bio-containers.git \
-    "$version_dir/src/bio-containers"
-cd "$version_dir/src/bio-containers"
+(
+    set -e
+    install_dir="/tsl/software/testing/BindCraft2/1.0.3/x86_64"
+    base="https://raw.githubusercontent.com/georgedeeks/bio-containers/4ed42aef3fbb885c365d50763691d85ea953d525/bindcraft2"
+    staging=$(mktemp -d)
+    trap 'rm -rf -- "$staging"' EXIT
+    curl -fL --retry 3 "$base/bin/bindcraft" -o "$staging/bindcraft"
+    curl -fL --retry 3 "$base/run-wrapper.slurm" -o "$staging/run-wrapper.slurm"
+    curl -fL --retry 3 "$base/example-settings.json" -o "$staging/example-settings.json"
+    install -d -m 755 "$install_dir/bin" "$install_dir/examples"
+    install -m 755 "$staging/bindcraft" "$install_dir/bin/bindcraft"
+    install -m 644 "$staging/run-wrapper.slurm" "$staging/example-settings.json" "$install_dir/examples/"
+)
 ```
 
-If that checkout already exists, update it with `git pull --ff-only` from its directory instead of cloning again. Install the launcher, examples and README beside the existing SIF:
+Then register the software with the normal site tool:
 
 ```bash
-install_dir="/tsl/software/testing/BindCraft2/1.0.3/x86_64"
-bash bindcraft2/install-launcher.sh "$install_dir"
-chmod -R a+rX "$install_dir"
+chmod -R a+rX /tsl/software/testing/BindCraft2/1.0.3/x86_64
 create-software-testing-wrapper BindCraft2-1.0.3
 ```
+
+For maintainers who already have a repository checkout, `bash bindcraft2/install-launcher.sh` is an optional way to copy the same files. It is not needed for the direct-download setup above.
 
 Use the description **BindCraft2 protein binder design (Apptainer, CUDA 12)** and suitable categories from the generator's prompts. The site's alternative is `create-tsl-testing-wrapper BindCraft2-1.0.3`; choose one generator, and edit an existing loader rather than forcing its replacement. As described in the user's site guide, the generator writes the central loader under `/tsl/software/testing/bin/` and catalogue metadata in the version directory.
 
