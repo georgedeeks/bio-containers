@@ -148,14 +148,9 @@ Verified on 2026-10-13 on GitHub's native Ubuntu 24.04 x86_64 runner: the image 
 
 **Weights result, user-reported 2026-10-13:** `bindcraft fetch-weights` downloaded and extracted the 5.3 GB AlphaFold parameter archive to `/tsl/software/testing/BindCraft2/1.0.3/x86_64/weights/alphafold`, then reported that directory and the packaged ProteinMPNN directory successfully. This command checks that the required AF2 and all three ProteinMPNN checkpoint variants exist and meet upstream's minimum file sizes. Shared weight staging is complete; the requester's Slurm job uses the paths above.
 
-Matplotlib reported an unwritable home configuration directory and successfully used a temporary fallback. For subsequent installation checks, give it a persistent writable cache on scratch, as the Slurm script already does:
+**Shared launcher result, user-reported 2026-10-13:** the site's `create-tsl-testing-wrapper` created `/tsl/software/testing/bin/BindCraft2-1.0.3` and its clean-shell sourcing check passed. After configuring the application-specific section, `bindcraft --check-install` completed in **5 minutes 26 seconds**, reporting both the packaged smoke-test PASS and `PASS: shared AlphaFold and ProteinMPNN checkpoint files found.` This verifies the shared launcher, container CPU checks and external checkpoint file checks together. Installation checks are complete for the agreed best-effort scope; the requester owns the first GPU workload test.
 
-```bash
-mpl_cache="/tsl/scratch/$USER/bindcraft2-cache/matplotlib"
-mkdir -p "$mpl_cache" &&
-apptainer exec --cleanenv --env "MPLCONFIGDIR=$mpl_cache" \
-    "$sif" bindcraft2-smoke-test
-```
+Matplotlib still reported `/tsl/scratch/deeks/bindcraft2-cache/matplotlib` as unwritable despite the launcher's explicit `MPLCONFIGDIR`. It successfully used a temporary cache under the launcher's per-invocation scratch directory, and both checks passed. The warning is non-fatal; persistent Matplotlib caching remains unresolved. Setting that same scratch cache path again is not a demonstrated fix, and the reported elapsed time does not establish that the cache warning caused the delay.
 
 From this repository's root:
 
@@ -171,7 +166,7 @@ The default command runs [smoke-test.py](smoke-test.py). It checks dependency co
 
 The GitHub workflow repeats the offline, read-only, non-root check before publishing `latest` and `sha-<commit>`. The default `apptainer run` also runs the installation check; use **`apptainer exec IMAGE bindcraft ...`** for software commands.
 
-Host launcher checks: `python3 bindcraft2/test-wrapper.py` exercises installation into a directory containing spaces, CPU/GPU routing, refusal of unallocated GPU work, unchanged CLI arguments and device lists, shared/cache paths, temporary-file cleanup and error propagation using a recording Apptainer stub. These check launcher behavior; the SIF's actual HPC CPU check is recorded above. The site's generated loader still needs to be installed and sourced on the HPC.
+Host launcher checks: `python3 bindcraft2/test-wrapper.py` exercises installation into a directory containing spaces, CPU/GPU routing, refusal of unallocated GPU work, unchanged CLI arguments and device lists, shared/cache paths, temporary-file cleanup and error propagation using a recording Apptainer stub. These check launcher behavior; the actual shared-launcher HPC installation check is recorded above.
 
 To update dependencies, check out the intended pinned upstream source, then run:
 
