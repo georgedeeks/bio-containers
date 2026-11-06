@@ -6,7 +6,7 @@ The container supports offline prediction from prepared inputs. Download the ima
 
 ## Verification status
 
-**Published; installation checks passed on 6 November 2026.** [Successful CI run](https://github.com/georgedeeks/bio-containers/actions/runs/42250059849), built from recipe commit [`95c3727`](https://github.com/georgedeeks/bio-containers/tree/95c372703969523fcae3eff86e330c886da90b85/protenix). The public image was independently checked for anonymous access, Linux x86_64 architecture, the correct source/model labels and a matching immutable manifest digest. The pull command below selects those exact contents.
+**Published; CI installation checks passed on 6 November 2026.** [Successful CI run](https://github.com/georgedeeks/bio-containers/actions/runs/42250059849), built from recipe commit [`95c3727`](https://github.com/georgedeeks/bio-containers/tree/95c372703969523fcae3eff86e330c886da90b85/protenix). The public image was independently checked for anonymous access, Linux x86_64 architecture, the correct source/model labels and a matching immutable manifest digest. The pull command below selects those exact contents.
 
 | Check | Status |
 | --- | --- |
@@ -14,7 +14,8 @@ The container supports offline prediction from prepared inputs. Download the ima
 | Image build and offline CPU installation checks | Passed; unprivileged user, read-only image, no network |
 | Official v1 assets and real-checkpoint CPU prediction | Passed in CI: five assets downloaded and checksummed; synthetic homodimer produced CIF, confidence JSON and summary CSV with one seed/sample/cycle/step |
 | Recorded run provenance | Checked: completed status, correct model/code, archived asset-manifest hash; asset hashes matched between both successful CI runs |
-| SIF conversion, asset staging and installation on software23 | Not run here; both recorded HPC login addresses failed DNS resolution from the build session |
+| HPC SIF conversion and minimal container startup | User-reported 6 November 2026: SIF created; `/bin/true` returned exit 0 with the missing `rc_preload.so` default mount disabled |
+| HPC Protenix startup and asset staging/check | Initial attempts were blocked before application startup by that mount; rerun with the workaround below, completion not yet reported |
 | GPU startup and representative complex on TSL | Requester's test; not run here |
 | Prediction accuracy or published benchmark reproduction | Not assessed |
 
@@ -41,12 +42,20 @@ export APPTAINER_CACHEDIR="/tsl/scratch/$USER/apptainer-cache"
 INSTALL=/tsl/software/testing/Protenix/1.0.9/x86_64
 SIF="$INSTALL/protenix.sif"
 ASSETS="$INSTALL/assets"
-mkdir -p "$APPTAINER_TMPDIR" "$APPTAINER_CACHEDIR" "$INSTALL"
-apptainer pull "$SIF" docker://ghcr.io/georgedeeks/protenix@sha256:289dbfedc9205ec78864a90cf06ccbb3dfe42919243cdea3883b11d730f9db3f
-apptainer exec --cleanenv "$SIF" protenix-smoke-test
-apptainer exec --cleanenv "$SIF" protenix-assets download --root "$ASSETS"
-apptainer exec --cleanenv "$SIF" protenix-assets check --root "$ASSETS"
+apptainer_options=(--cleanenv)
+if [[ ! -e /usr/local/lib64/rc_preload.so ]]; then
+    apptainer_options+=(--no-mount /usr/local/lib64/rc_preload.so)
+fi
+mkdir -p "$APPTAINER_TMPDIR" "$APPTAINER_CACHEDIR" "$INSTALL" &&
+apptainer pull "$SIF" docker://ghcr.io/georgedeeks/protenix@sha256:289dbfedc9205ec78864a90cf06ccbb3dfe42919243cdea3883b11d730f9db3f &&
+apptainer exec "${apptainer_options[@]}" "$SIF" protenix-smoke-test &&
+apptainer exec "${apptainer_options[@]}" "$SIF" protenix-assets download --root "$ASSETS" &&
+apptainer exec "${apptainer_options[@]}" "$SIF" protenix-assets check --root "$ASSETS"
 ```
+
+**Installer finish line:** after the SIF pull, startup check and final asset check succeed, hand over the SIF path, assets path and GPU-job guide. The installer needs no research project or scientific inputs. The remaining prediction examples are optional extra checks or requester work. A site loading wrapper can be added separately; the supplied Slurm script uses the SIF directly.
+
+The commands are chained with `&&` so later steps stop if an earlier one fails. If the SIF already exists from a successful pull, keep it and rerun only the required `exec` commands. The host-specific option skips only the [observed missing default library mount](../HPC_COMPATIBILITY.md#missing-default-library-mount), preserving it on hosts where the file exists and retaining the shared storage mounts. This does not require rebuilding the image.
 
 The installation smoke test checks imports, dependencies and native CPU kernels; it is not model inference or GPU validation. The asset commands also do not need a GPU. Complete the download and check before submitting an offline job. The tested OCI image downloads about 3.54 GB of compressed layers, and the five model/data assets total 2.13 GB; this excludes MSAs and prediction outputs. Allow additional space for SIF conversion, expanded layers and caches, and check your actual quota rather than the shared volume's free space. For private image access, updates without overwriting a working SIF, and shared software registration, follow the [installation guide](../ADDING_NEW_CONTAINER_GUIDE.md#4-pull-and-run-on-the-hpc).
 
@@ -62,10 +71,18 @@ Keep `APPTAINER_TMPDIR` on writable scratch. This explicitly selects the cache-d
 
 ## Reduced CPU installation test
 
+**Optional: not required for installer handover.** This prediction check already passed in CI. Anyone repeating it on the HPC supplies their own writable output location and compute allocation.
+
 CI also runs a tiny offline prediction with the real v1 checkpoint, an artificial 20-residue homodimer, one seed/sample/recycle/diffusion step and fp32. It runs without a GPU, as an unprivileged user with a read-only image and assets. This checks installation and output plumbing; the artificial structure and confidence scores have no scientific interpretation. The [workflow](../.github/workflows/build-protenix.yml) retains its small output/log and asset-manifest records.
 
 ```bash
-apptainer exec --cleanenv "$SIF" protenix-predict --cpu-smoke-test \
+SIF=/tsl/software/testing/Protenix/1.0.9/x86_64/protenix.sif
+ASSETS=/tsl/software/testing/Protenix/1.0.9/x86_64/assets
+apptainer_options=(--cleanenv)
+if [[ ! -e /usr/local/lib64/rc_preload.so ]]; then
+    apptainer_options+=(--no-mount /usr/local/lib64/rc_preload.so)
+fi
+apptainer exec "${apptainer_options[@]}" "$SIF" protenix-predict --cpu-smoke-test \
     --assets "$ASSETS" --input /opt/protenix-example-smoke.json \
     --out-dir /tsl/PROJECT/protenix/cpu-installation-check
 ```
@@ -82,7 +99,7 @@ For a first installation check, choose a small, representative complex whose inp
 
 ## Run a GPU job
 
-Download [run.slurm](https://raw.githubusercontent.com/georgedeeks/bio-containers/95c372703969523fcae3eff86e330c886da90b85/protenix/run.slurm) to your project directory. After staging assets on software23, return to a submission/login node and change to that directory before submitting. Its arguments are the SIF, assets, prepared input, new output directory, comma-separated seeds, and samples per seed. Replace `PROJECT` and the input filename with real paths:
+Download [run.slurm](https://raw.githubusercontent.com/georgedeeks/bio-containers/main/protenix/run.slurm) to your project directory. After staging assets on software23, return to a submission/login node and change to that directory before submitting. Its arguments are the SIF, assets, prepared input, new output directory, comma-separated seeds, and samples per seed. Replace `PROJECT` and the input filename with real paths:
 
 ```bash
 SIF=/tsl/software/testing/Protenix/1.0.9/x86_64/protenix.sif
@@ -105,7 +122,7 @@ These values illustrate the interface; they are not a reproduction of a publishe
 
 ## Summarize ipTM across seeds
 
-[summarize-confidence.py](https://raw.githubusercontent.com/georgedeeks/bio-containers/95c372703969523fcae3eff86e330c886da90b85/protenix/summarize-confidence.py) needs only Python's standard library. Download it beside `run.slurm`, or use the same helper inside the image as `apptainer exec --cleanenv "$SIF" protenix-summarize`. Run it against one output tree, after checking Slurm logs and any Protenix `ERR` files:
+[summarize-confidence.py](https://raw.githubusercontent.com/georgedeeks/bio-containers/95c372703969523fcae3eff86e330c886da90b85/protenix/summarize-confidence.py) needs only Python's standard library. Download it beside `run.slurm`, or use the same helper inside the image as `apptainer exec "${apptainer_options[@]}" "$SIF" protenix-summarize` after defining the host-specific options above. Run it against one output tree, after checking Slurm logs and any Protenix `ERR` files:
 
 ```bash
 python3 summarize-confidence.py /tsl/PROJECT/protenix/five-seed-run \

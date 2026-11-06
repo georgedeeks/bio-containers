@@ -185,6 +185,7 @@ Use this with `apptainer exec --cleanenv --no-eval --nv ...`. The `APPTAINERENV_
 | SSL/certificate error | Correct the CA/proxy configuration where the failure occurs. A container build cannot repair the HPC host's registry TLS setup. Keep certificate verification enabled. |
 | Command not found | Check the actual executable and PATH; inspect `/opt/conda/envs/tool/bin`. |
 | Permission denied / read-only filesystem | Use writable paths under `/hpc-home` or `/tsl`; do not add user `--bind` mounts on TSL. Check symlink destinations. |
+| Fatal mount of missing `/usr/local/lib64/rc_preload.so` | The [checked workaround](HPC_COMPATIBILITY.md#missing-default-library-mount) is `--no-mount /usr/local/lib64/rc_preload.so` on `exec` when that host file is absent. Keep the mount on hosts where it exists; keep shared storage mounts enabled. Retry failed startup/asset commands using the existing SIF. |
 | Illegal instruction / exec format error | Check compute-node CPU flags and image architecture against the package and base-image requirements. |
 | No space left during pull | Move cache and temporary storage to approved scratch; check quota as well as free disk space. |
 | Pull reports missing temporary directory | Run the scratch/cache `mkdir -p` step to completion before retrying; exporting a path does not create it. |

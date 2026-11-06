@@ -42,6 +42,12 @@ Do not use the software node for full analyses. The note identifies it as non-su
 
 [Apptainer 1.4.5's writability check](https://github.com/apptainer/apptainer/blob/v1.4.5/internal/pkg/util/fs/helper.go#L409-L413) uses `access(W_OK)`. Its cache warning already disables caching. For affected installation sessions, `export APPTAINER_DISABLE_CACHE=true` explicitly skips that optional cache and its check; retain a working scratch `APPTAINER_TMPDIR` for image conversion. Future pulls can repeat downloads/conversion; running an existing local SIF does not need this download cache. This is a workaround, not a permissions repair or proof that the full pull succeeded. Let a progressing pull finish and verify its final result. [Cache and temporary-directory documentation](https://apptainer.org/docs/user/1.4/build_env.html)
 
+### Missing default library mount
+
+**User-reported check, 2026-11-06:** Protenix OCI-to-SIF conversion completed, but all three subsequent `apptainer exec --cleanenv` commands failed before application startup: the default mount `/usr/local/lib64/rc_preload.so` referred to a missing host source. Running `apptainer exec --cleanenv --no-mount /usr/local/lib64/rc_preload.so "$SIF" /bin/true` then returned exit 0. This verifies SIF startup with that single mount disabled; Protenix startup/assets and GPU workload checks are separate.
+
+When the host file is absent, add `--no-mount /usr/local/lib64/rc_preload.so` to affected `exec` commands. Preserve the mount when the file exists. Do not disable all `bind-paths`: `/tsl` and `/hpc-home` are needed. The option filters configured system binds by destination; it does not remove explicitly supplied environment/command-line binds. Keep a successfully created SIF and retry the failed application commands after correcting the startup options. [Apptainer 1.4 documentation](https://apptainer.org/docs/user/1.4/bind_paths_and_mounts.html#disabling-system-binds)
+
 ## Vault reference and snapshot maintenance
 
 General cluster specifications live in the linked vault note above. This profile keeps the dated subset needed by these container workflows, plus repo-specific installation evidence. When refreshing it, preserve each fact’s checked/reported/older/unknown status and any more precise repo evidence; leave unresolved partition limits in the vault until confirmed.

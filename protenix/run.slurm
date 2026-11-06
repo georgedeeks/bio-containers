@@ -54,7 +54,12 @@ export APPTAINERENV_TRITON_CACHE_DIR="$job_cache/triton"
 export APPTAINERENV_MPLCONFIGDIR="$job_cache/matplotlib"
 export APPTAINERENV_OMP_NUM_THREADS="${SLURM_CPUS_PER_TASK:-4}"
 
-srun apptainer exec --cleanenv --no-eval --nv --pwd "$PWD" "$sif" \
+# Preserve the site library mount on hosts that provide it.
+apptainer_options=(--cleanenv --no-eval --nv --pwd "$PWD")
+if [[ ! -e /usr/local/lib64/rc_preload.so ]]; then
+    apptainer_options+=(--no-mount /usr/local/lib64/rc_preload.so)
+fi
+srun apptainer exec "${apptainer_options[@]}" "$sif" \
     protenix-predict --assets "$assets" --input "$input" --out-dir "$output" \
     --seeds "$seeds" --samples "$samples" "${extra[@]}"
 printf 'Completed: %s\nJob caches retained at: %s\n' "$output" "$job_cache"
