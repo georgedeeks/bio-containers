@@ -50,6 +50,14 @@ apptainer exec --cleanenv "$SIF" protenix-assets check --root "$ASSETS"
 
 The installation smoke test checks imports, dependencies and native CPU kernels; it is not model inference or GPU validation. The asset commands also do not need a GPU. Complete the download and check before submitting an offline job. The tested OCI image downloads about 3.54 GB of compressed layers, and the five model/data assets total 2.13 GB; this excludes MSAs and prediction outputs. Allow additional space for SIF conversion, expanded layers and caches, and check your actual quota rather than the shared volume's free space. For private image access, updates without overwriting a working SIF, and shared software registration, follow the [installation guide](../ADDING_NEW_CONTAINER_GUIDE.md#4-pull-and-run-on-the-hpc).
 
+**Known TSL cache warning:** `Cache disabled - cache location ... is not writable` can occur even when actual writes succeed; the [checked HPC behaviour](../HPC_COMPATIBILITY.md#shared-storage-permission-checks) records this for both of George's scratch cache/temp directories. `mkdir -p` alone does not resolve the permission-check mismatch. Once actual writes have been checked, use this in the installation shell for subsequent commands if affected:
+
+```bash
+export APPTAINER_DISABLE_CACHE=true
+```
+
+Keep `APPTAINER_TMPDIR` on writable scratch. This explicitly selects the cache-disabled behaviour Apptainer already used after the warning; it does not repair permissions. Let an in-progress pull finish, and continue after it succeeds and the startup check passes. A successfully pulled SIF does not need downloading again because of this warning. The model assets and application caches are separate from this optional image-download cache.
+
 `protenix-assets check` verifies the downloaded assets against the locally recorded SHA256 manifest. Retain that manifest with the analysis; it records the files used and detects subsequent changes. It is not an independent upstream checksum certification.
 
 ## Reduced CPU installation test
