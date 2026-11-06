@@ -1,0 +1,5 @@
+#!/usr/bin/env python3
+from protenix_runtime import assets_main, command
+
+if __name__ == "__main__":
+    command(assets_main)

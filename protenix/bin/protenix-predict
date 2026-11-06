@@ -1,0 +1,5 @@
+#!/usr/bin/env python3
+from protenix_runtime import command, predict_main
+
+if __name__ == "__main__":
+    command(predict_main)

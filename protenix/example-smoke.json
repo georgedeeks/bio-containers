@@ -1,0 +1,13 @@
+[
+  {
+    "name": "installation_smoke",
+    "sequences": [
+      {
+        "proteinChain": {
+          "sequence": "ACDEFGHIKLMNPQRSTVWY",
+          "count": 2
+        }
+      }
+    ]
+  }
+]

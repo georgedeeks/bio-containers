@@ -1,0 +1,37 @@
+# Inference-only dependency metadata for Protenix v1.0.9.
+# Application source is unchanged; its original full requirements are retained
+# in /opt/container-info/upstream-requirements.txt inside the image.
+# Native Torch triangle/LayerNorm kernels are used. Training, notebook UI,
+# cuEquivariance/DeepSpeed, torchvision/audio and sklearn-extra are excluded.
+# Resolve for Linux x86_64 / Python 3.12 with the command in the README.
+torch==2.7.1
+numpy==2.4.1
+scipy>=1.9.0
+ml_collections==1.1.0
+tqdm==4.67.1
+pandas==2.3.1
+PyYAML==6.0.2
+matplotlib==3.10.5
+rdkit==2025.9.3
+biopython==1.85
+biotite==1.4.0
+modelcif==1.4
+gemmi==0.6.7
+pdbeccdutils==1.0.0
+fair-esm==2.0.0
+scikit-learn==1.7.1
+pydantic>=2.0.0
+triton==3.3.1
+optree==0.17.0
+protobuf==6.31.1
+icecream==2.1.7
+click>=8.1
+requests>=2.32
+packaging>=24
+networkx>=3.4.2
+orjson>=3.10
+lmdb>=1.5
+
+# Pin the build backend used for modelcif and the source package metadata.
+setuptools==80.9.0
+wheel==0.45.1

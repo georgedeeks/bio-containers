@@ -50,6 +50,6 @@ For the vault’s general HPC specifications and historical Singularity workshop
 - `references/`: detailed evidence from existing site installations, including [AlphaFold 3.0.0](references/alphafold3.md).
 - [AGENTS.md](AGENTS.md): instructions for assistants working in this repository.
 
-Tools: [Stargraph](stargraph/README.md) and [BindCraft2](bindcraft2/README.md) (CUDA 12, with offline installation checks and a TSL Slurm example).
+Tools: [Stargraph](stargraph/README.md) and [BindCraft2](bindcraft2/README.md) (CUDA 12, with offline installation checks and a TSL Slurm example). [Protenix v1](protenix/README.md) adds the fixed `protenix_base_default_v1.0.0` model, offline asset preparation and per-seed confidence summaries.
 
 For shared installs, use the tested **site loader → executable launcher → SIF and weights** arrangement. Users run `source <Software>-<version>` and then the normal tool command. See the [shared-wrapper guide](ADDING_NEW_CONTAINER_GUIDE.md#shared-command-wrappers) and [creator maintenance notes](references/tsl-software-wrappers.md). The loader, container libraries and external model files have different roles; no new module system or HPC repository checkout is needed.

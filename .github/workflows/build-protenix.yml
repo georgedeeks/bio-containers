@@ -1,0 +1,151 @@
+name: Build protenix
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - 'protenix/**'
+      - '.github/workflows/build-protenix.yml'
+  pull_request:
+    branches: [main, master]
+    paths:
+      - 'protenix/**'
+      - '.github/workflows/build-protenix.yml'
+  workflow_dispatch:
+    inputs:
+      no_cache:
+        description: Reinstall without the build cache
+        type: boolean
+        default: false
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      packages: write
+    env:
+      TOOL_NAME: protenix
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Validate launchers and confidence summaries
+        env:
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: |
+          bash -n protenix/run.slurm
+          python3 -m unittest discover -s protenix -p 'test*.py' -v
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Set image name
+        id: image
+        shell: bash
+        run: echo "name=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/${TOOL_NAME}" >> "$GITHUB_OUTPUT"
+
+      - name: Build and load for testing
+        uses: docker/build-push-action@v7
+        with:
+          context: ./${{ env.TOOL_NAME }}
+          platforms: linux/amd64
+          load: true
+          push: false
+          pull: true
+          no-cache: ${{ inputs.no_cache == true }}
+          provenance: false
+          sbom: false
+          tags: |
+            ${{ steps.image.outputs.name }}:latest
+            ${{ steps.image.outputs.name }}:sha-${{ github.sha }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          cache-from: type=gha,scope=${{ env.TOOL_NAME }}
+          cache-to: type=gha,mode=max,scope=${{ env.TOOL_NAME }}
+
+      - name: Smoke test as an offline unprivileged user
+        env:
+          IMAGE_NAME: ${{ steps.image.outputs.name }}
+        run: |
+          docker run --rm --network none --read-only --user 10001:10001 \
+            --tmpfs /tmp:rw,exec,size=1g --workdir /tmp --env HOME=/tmp \
+            "${IMAGE_NAME}:sha-${GITHUB_SHA}"
+
+      - name: Stage v1 assets for the integration test
+        timeout-minutes: 25
+        run: |
+          python3 protenix/bin/protenix-assets download --root "$RUNNER_TEMP/protenix-assets"
+          python3 protenix/bin/protenix-assets check --root "$RUNNER_TEMP/protenix-assets"
+
+      - name: Tiny offline CPU prediction with the real v1 checkpoint
+        timeout-minutes: 20
+        env:
+          IMAGE_NAME: ${{ steps.image.outputs.name }}
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/protenix-result"
+          chmod 0777 "$RUNNER_TEMP/protenix-result"
+          docker run --rm --network none --read-only --user 10001:10001 \
+            --cpus 2 --memory 10g --tmpfs /tmp:rw,exec,size=2g --workdir /tmp \
+            --env HOME=/tmp --env OMP_NUM_THREADS=2 --env MKL_NUM_THREADS=2 \
+            --env OPENBLAS_NUM_THREADS=2 --env MPLCONFIGDIR=/tmp/matplotlib \
+            --mount "type=bind,src=$RUNNER_TEMP/protenix-assets,dst=/assets,readonly" \
+            --mount "type=bind,src=$GITHUB_WORKSPACE/protenix/example-smoke.json,dst=/example.json,readonly" \
+            --mount "type=bind,src=$RUNNER_TEMP/protenix-result,dst=/result" \
+            "${IMAGE_NAME}:sha-${GITHUB_SHA}" protenix-predict \
+            --assets /assets --input /example.json --out-dir /result/prediction \
+            --cpu-smoke-test 2>&1 | tee "$RUNNER_TEMP/protenix-result/cpu-smoke.log"
+          python3 protenix/summarize-confidence.py "$RUNNER_TEMP/protenix-result/prediction" \
+            --output-dir "$RUNNER_TEMP/protenix-result/summary" \
+            --expected-seeds 101 --expected-samples 1
+          echo 'Real v1 checkpoint: tiny synthetic CPU prediction passed offline, non-root and read-only. This is an installation check, not a GPU or accuracy benchmark.' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Retain small verification records
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: protenix-verification-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/protenix-assets/protenix-assets.json
+            ${{ runner.temp }}/protenix-result/
+          if-no-files-found: ignore
+          retention-days: 30
+
+      - name: Log in to GHCR
+        if: github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish tested image and record exact pull command
+        if: github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+        env:
+          IMAGE_NAME: ${{ steps.image.outputs.name }}
+        shell: bash
+        run: |
+          docker push "${IMAGE_NAME}:sha-${GITHUB_SHA}"
+          docker push "${IMAGE_NAME}:latest"
+          image_ref=$(docker image inspect "${IMAGE_NAME}:sha-${GITHUB_SHA}" --format '{{index .RepoDigests 0}}')
+          {
+            echo "## Published ${TOOL_NAME}"
+            echo
+            echo "Image: \`${image_ref}\`"
+            echo
+            echo 'Use this command to pull these exact contents (replace singularity with apptainer if needed):'
+            echo '```bash'
+            echo "singularity pull ${TOOL_NAME}-${GITHUB_SHA:0:12}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.sif docker://${image_ref}"
+            echo '```'
+            echo
+            echo 'For a private package, add --docker-login after pull. Package visibility is managed separately in GHCR.'
+            echo 'CI startup test passed. Use the tool README for setup and the requester workload test.'
+          } >> "$GITHUB_STEP_SUMMARY"
