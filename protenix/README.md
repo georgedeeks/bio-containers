@@ -6,7 +6,7 @@ The container supports offline prediction from prepared inputs. Download the ima
 
 ## Verification status
 
-**Published; CI installation checks passed on 6 November 2026.** [Successful CI run](https://github.com/georgedeeks/bio-containers/actions/runs/42250059849), built from recipe commit [`95c3727`](https://github.com/georgedeeks/bio-containers/tree/95c372703969523fcae3eff86e330c886da90b85/protenix). The public image was independently checked for anonymous access, Linux x86_64 architecture, the correct source/model labels and a matching immutable manifest digest. The pull command below selects those exact contents.
+**Ready for requester testing: CI and HPC installation checks passed on 6 November 2026.** [Successful CI run](https://github.com/georgedeeks/bio-containers/actions/runs/42250059849), built from recipe commit [`95c3727`](https://github.com/georgedeeks/bio-containers/tree/95c372703969523fcae3eff86e330c886da90b85/protenix). The public image was independently checked for anonymous access, Linux x86_64 architecture, the correct source/model labels and a matching immutable manifest digest. The pull command below selects those exact contents.
 
 | Check | Status |
 | --- | --- |
@@ -15,7 +15,7 @@ The container supports offline prediction from prepared inputs. Download the ima
 | Official v1 assets and real-checkpoint CPU prediction | Passed in CI: five assets downloaded and checksummed; synthetic homodimer produced CIF, confidence JSON and summary CSV with one seed/sample/cycle/step |
 | Recorded run provenance | Checked: completed status, correct model/code, archived asset-manifest hash; asset hashes matched between both successful CI runs |
 | HPC SIF conversion and minimal container startup | User-reported 6 November 2026: SIF created; `/bin/true` returned exit 0 with the missing `rc_preload.so` default mount disabled |
-| HPC Protenix startup and asset staging/check | Initial attempts were blocked before application startup by that mount; rerun with the workaround below, completion not yet reported |
+| HPC Protenix startup and asset staging/check | User-reported 6 November 2026: `protenix-smoke-test` passed with the missing mount disabled; all five v1 assets downloaded to `/tsl/software/testing/Protenix/1.0.9/x86_64/assets`; staging and the separate full SHA256 integrity check both passed |
 | GPU startup and representative complex on TSL | Requester's test; not run here |
 | Prediction accuracy or published benchmark reproduction | Not assessed |
 
