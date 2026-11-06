@@ -22,7 +22,7 @@ CI checks installation without a GPU. A successful image build does not establis
 
 - Linux x86_64, Python 3.12 and PyTorch 2.7.1 with CUDA 12.6 libraries. The container does not install or replace the host NVIDIA driver.
 - The image uses a hash-locked inference dependency set, excluding unused training/notebook and optional accelerator packages. Application source is unchanged; its package dependency metadata is adapted to that set. The original upstream requirements, resolved packages and source revision remain under `/opt/container-info`.
-- Native Torch triangle operations and LayerNorm avoid compiling optional CUDA extensions at startup. These choices may affect speed and numerical results compared with a different backend. The original upstream dependency list is retained in `/opt/container-info/upstream-requirements.txt`; the installed metadata uses the curated, hash-locked inference dependencies in this folder. Training/notebook packages and optional accelerated kernels are omitted; application source is unchanged.
+- Native Torch triangle operations and LayerNorm avoid compiling optional CUDA extensions at startup. These choices may affect speed and numerical results compared with a different backend.
 - The guarded `protenix-predict` command fixes the model name and requires prepared protein MSA paths. `--no-msa` is an explicit diagnostic option; do not treat its predictions as equivalent to a run with MSAs.
 - This initial runner disables templates and RNA MSA and rejects RNA inputs. It uses 10 cycles, 200 diffusion steps, bf16 and native Torch kernels for production; sampling counts and seeds are explicit. Match these choices when comparing results.
 - Model assets live outside the SIF in a persistent, site-mounted directory. Use absolute paths under `/hpc-home` or `/tsl`; no custom `--bind` mounts are required.
@@ -66,13 +66,13 @@ The CPU option accepts only the bundled synthetic input and cannot silently turn
 
 Use the [pinned upstream input schema](https://github.com/bytedance/Protenix/blob/510faf9f5cc8fbbbb8d9055934d3fa7e6877c76d/docs/infer_json_format.md). Each job has a name and molecular entities. For protein MSAs, use the documented `pairedMsaPath` and `unpairedMsaPath` fields with readable absolute paths on the HPC. Prepare MSAs and any other required input data before running on an offline compute node.
 
-The prediction command reads the supplied JSON and keeps a record of the run. Use unique job names and a new output directory for each run. Do not combine output trees from different checkpoints, input sequences or inference settings merely because the job names match.
+The prediction command preserves the supplied JSON and writes `run-info.json` with model/code versions, settings, seeds, and SHA256 hashes of the input JSON and referenced MSA/ligand files. It also saves the asset manifest alongside the predictions. Keep the referenced input files unchanged during a run. Use unique job names and a new output directory for each run. Do not combine output trees from different checkpoints, input sequences or inference settings merely because the job names match.
 
 For a first installation check, choose a small, representative complex whose inputs are ready. One seed and one diffusion sample establish that the GPU workflow runs; they do not provide an across-seed SD or a full accuracy benchmark. An explicitly MSA-free diagnostic can use `--no-msa`, but record that change when interpreting its results.
 
 ## Run a GPU job
 
-Download [run.slurm](run.slurm) from this repository. Its arguments are the SIF, assets, prepared input, new output directory, comma-separated seeds, and samples per seed. Replace `PROJECT` and the input filename with real paths:
+Download [run.slurm](https://raw.githubusercontent.com/georgedeeks/bio-containers/main/protenix/run.slurm) to your project directory. After staging assets on software23, return to a submission/login node and change to that directory before submitting. Its arguments are the SIF, assets, prepared input, new output directory, comma-separated seeds, and samples per seed. Replace `PROJECT` and the input filename with real paths:
 
 ```bash
 SIF=/tsl/software/testing/Protenix/1.0.9/x86_64/protenix.sif
@@ -82,7 +82,7 @@ OUTPUT=/tsl/PROJECT/protenix/first-gpu-test
 sbatch run.slurm "$SIF" "$ASSETS" "$INPUT" "$OUTPUT" '101' 1
 ```
 
-Use [run.slurm](run.slurm) as the resource request to review and adjust for your target. Its first workload test must check that PyTorch sees the allocated GPU and that Protenix writes predictions without errors. The recorded driver evidence is node-specific; do not assume every GPU node has the same driver or memory. Preserve the scheduler's device assignment when using `--cleanenv`, as the supplied script does.
+Use [run.slurm](run.slurm) as the resource request to review and adjust for your target. Its first workload test must check that PyTorch sees the allocated GPU and that Protenix writes predictions without errors. The script requests `tsl2048n2` because that is the node with recorded A100 80 GB and driver evidence; this restricts scheduling to that node. Do not assume every GPU node has the same driver or memory. Preserve the scheduler's device assignment when using `--cleanenv`, as the supplied script does.
 
 After the first test, a multi-seed run uses a new output directory and an explicit sampling budget. For example, five seeds with five diffusion samples each produce 25 predicted structures per successfully completed job:
 
@@ -95,7 +95,7 @@ These values illustrate the interface; they are not a reproduction of a publishe
 
 ## Summarize ipTM across seeds
 
-[summarize-confidence.py](summarize-confidence.py) needs only Python's standard library. Run it against one output tree, after checking Slurm logs and any Protenix `ERR` files:
+[summarize-confidence.py](https://raw.githubusercontent.com/georgedeeks/bio-containers/main/protenix/summarize-confidence.py) needs only Python's standard library. Download it beside `run.slurm`, or use the same helper inside the image as `apptainer exec --cleanenv "$SIF" protenix-summarize`. Run it against one output tree, after checking Slurm logs and any Protenix `ERR` files:
 
 ```bash
 python3 summarize-confidence.py /tsl/PROJECT/protenix/five-seed-run \

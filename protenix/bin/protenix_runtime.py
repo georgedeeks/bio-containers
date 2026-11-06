@@ -211,6 +211,36 @@ def validate_input(path, no_msa=False):
     return data
 
 
+def referenced_input_files(jobs):
+    """Fingerprint external alignments/ligands without modifying their contents."""
+    records = {}
+    for job in jobs:
+        for entity_index, entity in enumerate(job["sequences"], start=1):
+            kind, chain = next(iter(entity.items()))
+            paths = {}
+            if kind == "proteinChain":
+                paths = {key: chain[key] for key in ("pairedMsaPath", "unpairedMsaPath")
+                         if chain.get(key) is not None}
+            elif kind == "ligand" and str(chain.get("ligand", "")).startswith("FILE_"):
+                paths = {"ligand": chain["ligand"][5:]}
+            for field, value in paths.items():
+                path = absolute_path(value)
+                resolved = str(path)
+                if resolved not in records:
+                    before = path.stat()
+                    digest = sha256(path)
+                    after = path.stat()
+                    if (before.st_size, before.st_mtime_ns) != (after.st_size, after.st_mtime_ns):
+                        raise ValueError(f"Input file changed while hashing: {path}")
+                    records[resolved] = {
+                        "path": resolved, "size": after.st_size, "sha256": digest, "references": [],
+                    }
+                records[resolved]["references"].append({
+                    "job": job["name"], "entity": entity_index, "field": field, "input_path": value,
+                })
+    return list(records.values())
+
+
 def verify_outputs(root, jobs, seeds, samples):
     errors = [str(p) for p in (root / "ERR").rglob("*") if p.is_file()]
     if errors:
@@ -269,13 +299,16 @@ def predict_main(argv=None):
     if args.cpu_smoke_test:
         args.no_msa, args.dtype, args.seeds, args.samples = True, "fp32", [101], 1
     assets, source, output = map(absolute_path, (args.assets, args.input, args.out_dir))
-    check_assets(assets, full=False)  # Run the full explicit assets check once after staging/copying.
+    asset_manifest = check_assets(assets, full=False)  # Full check once after staging/copying.
     jobs = validate_input(source, args.no_msa)
     if args.cpu_smoke_test and jobs != SMOKE_INPUT:
         raise ValueError("--cpu-smoke-test accepts only the bundled example-smoke.json synthetic homodimer")
     if output.exists():
         raise ValueError(f"Output already exists; choose a fresh directory: {output}")
+    external_inputs = referenced_input_files(jobs)
     output.mkdir(parents=True)
+    manifest_copy = output / MANIFEST
+    write_json(manifest_copy, asset_manifest)
     # Keep upstream preprocessing away from the user's original input.
     input_copy = output / "input.json"
     write_json(input_copy, jobs)
@@ -296,7 +329,8 @@ def predict_main(argv=None):
     ]
     record = {
         "model": MODEL, "source_version": VERSION, "source_commit": SOURCE_COMMIT,
-        "input_sha256": sha256(source), "asset_manifest_sha256": sha256(assets / MANIFEST),
+        "input_sha256": sha256(source), "asset_manifest_sha256": sha256(manifest_copy),
+        "asset_manifest_file": MANIFEST, "external_input_files": external_inputs,
         "seeds": args.seeds, "samples_per_seed": args.samples, "dtype": args.dtype,
         "msa": not args.no_msa, "protenix_arguments": arguments,
         "cpu_installation_smoke": args.cpu_smoke_test,

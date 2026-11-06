@@ -138,6 +138,57 @@ class RuntimeTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Output already exists"):
             runtime.predict_main(self.args("--no-msa"))
 
+    def test_external_msa_change_updates_provenance_without_json_change(self):
+        self.stage_assets()
+        msa = self.root / "alignment.a3m"
+        msa.write_text(">query\nACDEFGHIKLMNPQRSTVWY\n>hit\nACDEFGHIKLMNPQRSTVWY\n")
+        msa_link = self.root / "alignment-link.a3m"
+        msa_link.symlink_to(msa)
+        data = deepcopy(runtime.SMOKE_INPUT)
+        data[0]["sequences"][0]["proteinChain"]["unpairedMsaPath"] = str(msa_link)
+        self.input.write_text(json.dumps(data))
+        original_json = self.input.read_bytes()
+        original_manifest = (self.assets / runtime.MANIFEST).read_bytes()
+        records = []
+        for run in range(2):
+            self.output = self.root / f"result-{run}"
+            before = msa.read_bytes()
+            with patch.object(runtime, "run_upstream", side_effect=self.make_outputs):
+                runtime.predict_main(self.args())
+            self.assertEqual(msa.read_bytes(), before)
+            self.assertEqual(self.input.read_bytes(), original_json)
+            self.assertEqual((self.assets / runtime.MANIFEST).read_bytes(), original_manifest)
+            record = json.loads((self.output / "run-info.json").read_text())
+            snapshot = self.output / record["asset_manifest_file"]
+            self.assertEqual(json.loads(snapshot.read_text()), json.loads(original_manifest))
+            self.assertEqual(record["asset_manifest_sha256"], runtime.sha256(snapshot))
+            self.assertEqual(record["external_input_files"][0]["path"], str(msa.resolve()))
+            self.assertEqual(record["external_input_files"][0]["size"], len(before))
+            records.append(record)
+            if run == 0:
+                # Same file size and unchanged JSON, but an alignment hit changed.
+                msa.write_text(msa.read_text().replace(">hit\nA", ">hit\nV"))
+        self.assertEqual(records[0]["input_sha256"], records[1]["input_sha256"])
+        self.assertNotEqual(records[0]["external_input_files"][0]["sha256"],
+                            records[1]["external_input_files"][0]["sha256"])
+
+    def test_paired_unpaired_and_file_ligand_provenance(self):
+        msa = self.root / "shared.a3m"
+        ligand = self.root / "ligand.sdf"
+        msa.write_text(">query\nACDE\n")
+        ligand.write_text("ligand test fixture\n")
+        data = deepcopy(runtime.SMOKE_INPUT)
+        protein = data[0]["sequences"][0]["proteinChain"]
+        protein.update(pairedMsaPath=str(msa), unpairedMsaPath=str(msa))
+        data[0]["sequences"].append({"ligand": {"ligand": "FILE_" + str(ligand), "count": 1}})
+        records = {row["path"]: row for row in runtime.referenced_input_files(data)}
+        self.assertEqual(len(records), 2)
+        msa_record = records[str(msa.resolve())]
+        self.assertEqual({ref["field"] for ref in msa_record["references"]},
+                         {"pairedMsaPath", "unpairedMsaPath"})
+        self.assertEqual(records[str(ligand.resolve())]["sha256"], runtime.sha256(ligand))
+        self.assertEqual(records[str(ligand.resolve())]["references"][0]["entity"], 2)
+
     def test_cpu_smoke_is_fixed_and_rejects_real_inputs(self):
         self.stage_assets()
         with patch.object(runtime, "run_upstream", side_effect=self.make_outputs) as upstream:
