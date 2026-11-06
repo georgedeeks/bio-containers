@@ -2,6 +2,8 @@
 
 Start in this repository's root. You need Python 3.8+ to generate the files and Git to push them. Docker is optional locally: GitHub Actions builds and tests the image. The HPC needs a working Singularity or Apptainer installation.
 
+For general cluster specifications and the historical `.def`/sandbox/overlay workshop, see [vault references](HPC_COMPATIBILITY.md#vault-reference-and-snapshot-maintenance). This guide maintains the Dockerfile → GitHub Actions → GHCR → SIF deployment workflow.
+
 ## 1. Check the software against the HPC
 
 Read [HPC_COMPATIBILITY.md](HPC_COMPATIBILITY.md) and the software's official installation instructions. Check its Linux architecture, CPU instruction requirements, GPU/MPI needs, memory, and external databases. Prefer a maintained upstream image or prebuilt Conda package over compiling from source when it meets those requirements.
@@ -83,7 +85,7 @@ sif="$HOME/containers/${tool}.sif"
 "$runtime" pull "$sif" "docker://ghcr.io/${owner}/${tool}:latest"
 ```
 
-Home quota is not yet recorded. If the SIF will not fit, choose a suitable path under `/tsl` visible to compute nodes. Scratch is not backed up; retain the image digest and copy any SIF/results you need to keep to persistent storage.
+Check the [recorded home quota](HPC_COMPATIBILITY.md#tsl--nbi-cluster-profile) and your remaining space before pulling. If the SIF will not fit, choose a suitable path under `/tsl` visible to compute nodes. Scratch is not backed up; retain the image digest and copy any SIF/results you need to keep to persistent storage.
 
 For **shared software installs**, the current site convention is `/tsl/software/testing/<Software>/<version>/x86_64/`. Set `sif` to a file there instead of `$HOME/containers`; keep the Apptainer cache/temp settings on scratch. See the [BindCraft2 setup](bindcraft2/README.md#pull-the-image-and-prepare-weights) for a concrete example with shared model weights. Installing at this path does not require rebuilding the image.
 

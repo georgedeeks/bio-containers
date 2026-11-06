@@ -12,7 +12,7 @@ Use **ready for requester testing** once the build and relevant available checks
 
 ## TSL / NBI cluster profile
 
-Updated 2026-10-13 from the user's Obsidian note `Code/Infrastructure & Tech/Install & HPC/HPC Guide/TSL HPC specifications.md` and supplied cluster-command output. **Checked** means a live check reported by the user; **older notes** means not recently re-checked. GPU nodes are separate Slurm resources. Existing AlphaFold installations provide evidence of successful GPU container use; the AF3 build history and package inventory are in the [AlphaFold reference](references/alphafold3.md).
+First compiled 2026-10-13 from the user’s [TSL HPC specifications](obsidian://open?vault=Georgeous&file=Code%2FHPC%20Guide%2FTSL%20HPC%20specifications) (`Code/HPC Guide/TSL HPC specifications.md`) and supplied cluster-command output. Snapshot reconciled with the live vault on 2026-11-06; this refresh is not a new cluster check, and the original check/report dates still apply. **Checked** means a live check reported by the user; **older notes** means not recently re-checked. GPU nodes are separate Slurm resources. Existing AlphaFold installations provide evidence of successful GPU container use; the AF3 build history and package inventory are in the [AlphaFold reference](references/alphafold3.md).
 
 | Property | Evidence and current value |
 | --- | --- |
@@ -26,8 +26,8 @@ Updated 2026-10-13 from the user's Obsidian note `Code/Infrastructure & Tech/Ins
 | Internet | **No internet on submission or compute nodes. Use `software23` for image pulls, packages, and model/data downloads** (checked). GitHub Actions can still build externally |
 | User bind mounts | **`--bind` reported disabled**; `/hpc-home` and `/tsl` reported as default mounts (older notes). Avoid custom binds; verify visibility in the first container test. New mounts require site support |
 | Temporary storage | `/tmp` is only **5 GB**, `$TMPDIR` unset (checked). Set container caches and temporary paths under `/tsl/scratch/$USER` before pulling |
-| Scratch | `/tsl/scratch`: 77 TB volume, 38 TB free at the note's check; up to 3 TB per user from older notes. Usage changes; check quota/free space. Not backed up |
-| Persistent SIFs/results | `/hpc-home` or a suitable `/tsl` location visible to jobs. Home quota unrecorded; retain needed results/SIFs outside purgeable scratch |
+| Scratch | `/tsl/scratch`: 77 TB volume, 38 TB free at the 2026-10-13 check; up to **3 TB per user (George, 2026-10-28)**. Usage changes; check quota/free space. Not backed up |
+| Persistent SIFs/results | `/hpc-home` or a suitable `/tsl` location visible to jobs. Home quota **300 GB (George, 2026-10-28)**; retain needed results/SIFs outside purgeable scratch |
 | Shared software installs | User's current convention: `/tsl/software/testing/<Software>/<version>/x86_64/` (reported 2026-10-13; flexible). Prefer this for shared SIF installations when writable; keep download/conversion and per-user job caches on scratch. Shared weights may live alongside the SIF or in an existing shared model directory; settings/results belong in users' project directories |
 | Shared software loading | `create-tsl-testing-wrapper` creation, clean-shell verification, and subsequent user `source <Software>-<version>`/CLI startup succeeded (checked 2026-10-13). Install launchers in `x86_64/bin`; the creator writes the sourced loader in `/tsl/software/testing/bin/` and catalogue metadata in the version directory. Preserve the site's header/footer and `source hpccore-5`, adding runtime dependencies/PATH in the app-specific section. The HPC team's `create-software-testing-wrapper` is another documented option. See [creator fixes and deployment notes](references/tsl-software-wrappers.md) |
 | Shared storage permissions | User reports server-side Isilon ACLs can disagree with visible mode bits and `test -w`; the working creator probes write access with `mktemp`. Apptainer disabled its scratch cache during a successful pull, and Matplotlib used a temporary scratch cache during a successful installation check. Persistent cache writability remains unresolved; inspect actual writes and final results rather than treating every permission warning as fatal |
@@ -35,6 +35,12 @@ Updated 2026-10-13 from the user's Obsidian note `Code/Infrastructure & Tech/Ins
 | MPI / local image builds | MPI integration unverified. Whether fakeroot builds work on software23 is unknown; pulling our published Docker images avoids needing a local Dockerfile build |
 
 Do not use the software node for full analyses. The note identifies it as non-submittable to Slurm; run analyses in compute allocations. The report that downloads work on software23 is not evidence that login or GPU nodes have internet.
+
+## Vault reference and snapshot maintenance
+
+General cluster specifications live in the linked vault note above. This profile keeps the dated subset needed by these container workflows, plus repo-specific installation evidence. When refreshing it, preserve each fact’s checked/reported/older/unknown status and any more precise repo evidence; leave unresolved partition limits in the vault until confirmed.
+
+The [historical Singularity workshop](obsidian://open?vault=Georgeous&file=Code%2FHPC%20Guide%2FHPC%20Installs%2FSingularity%20%26%20Apptainer%2FSingularity%20Best%20Practices) covers `.def` files, sandboxes, overlays and dated site notes. The [adding guide](ADDING_NEW_CONTAINER_GUIDE.md) maintains this repo’s build and deployment workflow. Vault links open the local **Georgeous** Obsidian vault; this profile remains usable without vault access.
 
 ## GPU information without reserving a GPU
 

@@ -39,6 +39,8 @@ It refuses to replace existing tools. Check the new tool against the [HPC profil
 
 Builds run when the tool folder or its workflow changes. Pull requests are tested without publishing; successful builds on the repository's default branch publish `latest` and a `sha-<full-commit>` tag. Use the **image digest printed in the Actions summary** to retrieve an exact image later. A manual **Run workflow** button is also available.
 
+For the vault’s general HPC specifications and historical Singularity workshop, see [vault references and snapshot maintenance](HPC_COMPATIBILITY.md#vault-reference-and-snapshot-maintenance).
+
 ## Repository layout
 
 - `tool-name/`: Dockerfile and tool-specific usage/compatibility notes.
