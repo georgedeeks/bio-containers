@@ -99,7 +99,7 @@ For a first installation check, choose a small, representative complex whose inp
 
 ## Run a GPU job
 
-Download [run.slurm](https://raw.githubusercontent.com/georgedeeks/bio-containers/main/protenix/run.slurm) to your project directory. After staging assets on software23, return to a submission/login node and change to that directory before submitting. Its arguments are the SIF, assets, prepared input, new output directory, comma-separated seeds, and samples per seed. Replace `PROJECT` and the input filename with real paths:
+Download [run.slurm](https://raw.githubusercontent.com/georgedeeks/bio-containers/5700f98624047b907b2996e67196e0cdc2218033/protenix/run.slurm) to your project directory. After staging assets on software23, return to a submission/login node and change to that directory before submitting. Its arguments are the SIF, assets, prepared input, new output directory, comma-separated seeds, and samples per seed. Replace `PROJECT` and the input filename with real paths:
 
 ```bash
 SIF=/tsl/software/testing/Protenix/1.0.9/x86_64/protenix.sif
